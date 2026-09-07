@@ -1,0 +1,43 @@
+{
+  "name": "backend",
+  "module": "src/server.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot src/server.ts",
+    "start": "NODE_ENV=production bun src/server.ts",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "db:reset": "docker compose down -v && docker compose up -d --wait",
+    "db:setup": "docker compose up -d --wait && bun x drizzle-kit migrate",
+    "auth:schema": "bun x @better-auth/cli generate --config ./src/lib/auth.ts --output ./src/db/schema/auth.ts -y",
+    "db:generate": "bun x drizzle-kit generate",
+    "db:migrate": "bun x drizzle-kit migrate",
+    "db:push": "bun x drizzle-kit push",
+    "db:studio": "bun x drizzle-kit studio",
+    "verify:trello": "bun scripts/verify-trello.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.10"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "better-auth": "^1.7.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
+    "multer": "^2.3.0",
+    "pg": "^8.23.0",
+    "zod": "^4.5.4"
+  }
+}
