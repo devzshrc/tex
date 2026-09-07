@@ -7,6 +7,17 @@ import { httpLogger } from "./common/middleware/request-logger";
 import { errorHandler, notFoundHandler } from "./common/middleware/error-handler";
 import { authRouter } from "./services/auth/auth.routes";
 import { healthRouter } from "./services/health/health.routes";
+import { organizationsRouter } from "./services/organizations/organizations.routes";
+import { boardsRouter } from "./services/boards/boards.routes";
+import { listsRouter } from "./services/lists/lists.routes";
+import { cardsRouter } from "./services/cards/cards.routes";
+import { labelsRouter } from "./services/labels/labels.routes";
+import { checklistsRouter } from "./services/checklists/checklists.routes";
+import { attachmentsRouter } from "./services/attachments/attachments.routes";
+import { fieldsRouter } from "./services/fields/fields.routes";
+import { searchRouter } from "./services/search/search.routes";
+import { mutationNotifier, realtimeRouter } from "./services/realtime/realtime.routes";
+import { meRouter } from "./services/me/me.routes";
 
 /**
  * Composition root (API gateway): global middleware + service routers.
@@ -14,7 +25,7 @@ import { healthRouter } from "./services/health/health.routes";
  * split into its own deployable behind this same gateway without
  * changing its routes:
  *   - auth service  → /api/auth  (service routes + Better Auth handler)
- *   - <next service> → /api/v1/<name>
+ *   - trello domain → /api/v1/organizations, /boards, /lists, /cards
  *   - platform       → /health
  *
  * Ordering matters: the Better Auth handler parses its own body, so it
@@ -40,6 +51,22 @@ export function createApp() {
 
   // Platform probes.
   app.use("/health", healthRouter);
+
+  // Trello domain services (need JSON bodies — mounted after the parser).
+  // mutationNotifier fans out realtime board events for every successful
+  // Trello mutation; it only observes (never alters) responses.
+  app.use("/api/v1", mutationNotifier());
+  app.use("/api/v1/organizations", organizationsRouter);
+  app.use("/api/v1/boards", boardsRouter);
+  app.use("/api/v1/lists", listsRouter);
+  app.use("/api/v1/cards", cardsRouter);
+  app.use("/api/v1/labels", labelsRouter);
+  app.use("/api/v1/checklists", checklistsRouter);
+  app.use("/api/v1/attachments", attachmentsRouter);
+  app.use("/api/v1/fields", fieldsRouter);
+  app.use("/api/v1/search", searchRouter);
+  app.use("/api/v1/realtime", realtimeRouter);
+  app.use("/api/v1/me", meRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

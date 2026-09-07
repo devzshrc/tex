@@ -1,18 +1,18 @@
 import { Pool } from "pg";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
-import * as schema from "../db/schema/auth";
+import * as authSchema from "../db/schema/auth";
+import * as trelloSchema from "../db/schema/trello";
 import { env } from "./env";
 
-// NOTE: this static import is safe because `src/db/schema/auth.ts` is
-// committed. It is (re)generated with `bun run auth:schema` whenever the
-// Better Auth options change — generation itself doesn't need the schema,
-// so there is no chicken-and-egg on fresh clones.
+// NOTE: `src/db/schema/auth.ts` is committed (regenerated with
+// `bun run auth:schema` when Better Auth options change); the Trello
+// tables live in `src/db/schema/trello.ts`. The Better Auth adapter
+// deliberately receives the auth tables only, while `db` serves both.
 
 /**
  * Singleton Postgres pool + Drizzle client shared by every service.
- * `schema` is the Better Auth table set (generated via `bun run auth:schema`
- * into `src/db/schema/auth.ts`) so relational queries (`db.query.*`) and
- * the Better Auth adapter use the same source of truth.
+ * Relational queries (`db.query.*`) span auth + Trello tables from this
+ * single source of truth.
  */
 export const pool = new Pool({
   connectionString: env.DATABASE_URL,
@@ -21,6 +21,8 @@ export const pool = new Pool({
   connectionTimeoutMillis: 5_000,
 });
 
+export { authSchema };
+const schema = { ...authSchema, ...trelloSchema };
 export { schema };
 export const db: NodePgDatabase<typeof schema> = drizzle(pool, { schema });
 

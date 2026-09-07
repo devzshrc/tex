@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { env } from "../config/env";
-import { db, schema } from "../config/database";
+import { db, authSchema } from "../config/database";
 
 /**
  * Canonical Better Auth instance (Google OAuth only — no password auth).
@@ -20,7 +20,7 @@ import { db, schema } from "../config/database";
 export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
-  database: drizzleAdapter(db, { provider: "pg", schema }),
+  database: drizzleAdapter(db, { provider: "pg", schema: authSchema }),
   trustedOrigins: [env.FRONTEND_URL],
   socialProviders: {
     google: {
