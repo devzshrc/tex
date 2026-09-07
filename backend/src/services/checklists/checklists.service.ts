@@ -2,7 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "../../config/database";
 import { card, cardActivity, cardAssignee, checklist, checklistItem } from "../../db/schema/trello";
 import { badRequest, notFound } from "../../common/errors";
-import { keyAfterLast, keyBetween } from "../../common/order";
+import { rankAppend, rankBetween } from "../../common/lexorank";
 import {
   getMembership,
   loadCardContext,
@@ -25,24 +25,24 @@ async function logChecklistActivity(
   });
 }
 
-async function maxChecklistOrder(cardId: string): Promise<number | null> {
+async function maxChecklistRank(cardId: string): Promise<string | null> {
   const [row] = await db
-    .select({ order: checklist.order })
+    .select({ rank: checklist.rank })
     .from(checklist)
     .where(eq(checklist.cardId, cardId))
-    .orderBy(desc(checklist.order))
+    .orderBy(desc(checklist.rank))
     .limit(1);
-  return row?.order ?? null;
+  return row?.rank ?? null;
 }
 
-async function maxItemOrder(checklistId: string): Promise<number | null> {
+async function maxItemRank(checklistId: string): Promise<string | null> {
   const [row] = await db
-    .select({ order: checklistItem.order })
+    .select({ rank: checklistItem.rank })
     .from(checklistItem)
     .where(eq(checklistItem.checklistId, checklistId))
-    .orderBy(desc(checklistItem.order))
+    .orderBy(desc(checklistItem.rank))
     .limit(1);
-  return row?.order ?? null;
+  return row?.rank ?? null;
 }
 
 async function assertAssignee(scopeOrgId: string, assigneeUserId: string): Promise<void> {
@@ -54,15 +54,15 @@ export const checklistsService = {
   async create(
     userId: string,
     cardId: string,
-    input: { title: string; beforeOrder?: number | null; afterOrder?: number | null },
+    input: { title: string; beforeRank?: string | null; afterRank?: string | null },
   ) {
     await loadCardContext(userId, cardId);
-    const order =
-      input.beforeOrder != null || input.afterOrder != null
-        ? keyBetween(input.beforeOrder ?? null, input.afterOrder ?? null)
-        : keyAfterLast(await maxChecklistOrder(cardId));
+    const rank =
+      input.beforeRank != null || input.afterRank != null
+        ? rankBetween(input.beforeRank ?? null, input.afterRank ?? null)
+        : rankAppend(await maxChecklistRank(cardId));
     const [created] = await db.transaction(async (tx) => {
-      const [row] = await tx.insert(checklist).values({ title: input.title, cardId, order }).returning();
+      const [row] = await tx.insert(checklist).values({ title: input.title, cardId, rank }).returning();
       if (!row) throw new Error("Checklist insert failed");
       await logChecklistActivity(tx, { cardId, userId, action: "CHECKLIST_ADDED", details: { checklistId: row.id, title: input.title } });
       return [row];
@@ -77,10 +77,10 @@ export const checklistsService = {
     return updated;
   },
 
-  async reposition(userId: string, checklistId: string, input: { beforeOrder: number | null; afterOrder: number | null }) {
+  async reposition(userId: string, checklistId: string, input: { beforeRank: string | null; afterRank: string | null }) {
     await loadChecklistContext(userId, checklistId);
-    const order = keyBetween(input.beforeOrder, input.afterOrder);
-    const [updated] = await db.update(checklist).set({ order }).where(eq(checklist.id, checklistId)).returning();
+    const rank = rankBetween(input.beforeRank, input.afterRank);
+    const [updated] = await db.update(checklist).set({ rank }).where(eq(checklist.id, checklistId)).returning();
     if (!updated) throw notFound("Checklist not found");
     return updated;
   },
@@ -96,17 +96,17 @@ export const checklistsService = {
   async addItem(
     userId: string,
     checklistId: string,
-    input: { text: string; assigneeUserId?: string; beforeOrder?: number | null; afterOrder?: number | null },
+    input: { text: string; assigneeUserId?: string; beforeRank?: string | null; afterRank?: string | null },
   ) {
     const { scope } = await loadChecklistContext(userId, checklistId);
     if (input.assigneeUserId) await assertAssignee(scope.organizationId, input.assigneeUserId);
-    const order =
-      input.beforeOrder != null || input.afterOrder != null
-        ? keyBetween(input.beforeOrder ?? null, input.afterOrder ?? null)
-        : keyAfterLast(await maxItemOrder(checklistId));
+    const rank =
+      input.beforeRank != null || input.afterRank != null
+        ? rankBetween(input.beforeRank ?? null, input.afterRank ?? null)
+        : rankAppend(await maxItemRank(checklistId));
     const [created] = await db
       .insert(checklistItem)
-      .values({ text: input.text, checklistId, order, assigneeUserId: input.assigneeUserId ?? null })
+      .values({ text: input.text, checklistId, rank, assigneeUserId: input.assigneeUserId ?? null })
       .returning();
     if (!created) throw new Error("Checklist item insert failed");
     return created;
@@ -128,12 +128,12 @@ export const checklistsService = {
     return updated;
   },
 
-  async repositionItem(userId: string, itemId: string, input: { beforeOrder: number | null; afterOrder: number | null }) {
+  async repositionItem(userId: string, itemId: string, input: { beforeRank: string | null; afterRank: string | null }) {
     await loadChecklistItemContext(userId, itemId);
-    const order = keyBetween(input.beforeOrder, input.afterOrder);
+    const rank = rankBetween(input.beforeRank, input.afterRank);
     const [updated] = await db
       .update(checklistItem)
-      .set({ order, updatedAt: new Date() })
+      .set({ rank, updatedAt: new Date() })
       .where(eq(checklistItem.id, itemId))
       .returning();
     if (!updated) throw notFound("Checklist item not found");
@@ -159,20 +159,20 @@ export const checklistsService = {
         throw badRequest("CROSS_ORG_MOVE", "Items can only convert within the same organization");
       }
     }
-    const order = keyAfterLast(
+    const rank = rankAppend(
       (
         await db
-          .select({ order: card.order })
+          .select({ rank: card.rank })
           .from(card)
           .where(eq(card.listId, toListId))
-          .orderBy(desc(card.order))
+          .orderBy(desc(card.rank))
           .limit(1)
-      )[0]?.order ?? null,
+      )[0]?.rank ?? null,
     );
     const [created] = await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(card)
-        .values({ title: item.text, listId: toListId, order, description: null })
+        .values({ title: item.text, listId: toListId, rank, description: null })
         .returning();
       if (!row) throw new Error("Card insert failed");
       if (item.assigneeUserId) {

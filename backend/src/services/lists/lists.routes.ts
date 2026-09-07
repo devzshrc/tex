@@ -4,19 +4,20 @@ import { requireSession } from "../auth/auth.service";
 import { parseBody, requireUserId, titleField, uuidParam } from "../../common/validation";
 import { listsService } from "./lists.service";
 
-const orderField = z.number().finite();
+const rankField = z.string().min(1).max(64);
 const createListBody = z.object({
   boardId: uuidParam,
   title: titleField(120),
-  beforeOrder: orderField.nullish(),
-  afterOrder: orderField.nullish(),
+  beforeRank: rankField.nullish(),
+  afterRank: rankField.nullish(),
 });
 const updateListBody = z.object({
   title: titleField(120).optional(),
   archived: z.boolean().optional(),
   boardId: uuidParam.optional(),
+  expectedVersion: z.number().int().min(1),
 });
-const positionBody = z.object({ beforeOrder: orderField.nullable(), afterOrder: orderField.nullable() });
+const positionBody = z.object({ beforeRank: rankField.nullable(), afterRank: rankField.nullable(), expectedVersion: z.number().int().min(1) });
 
 /** Lists. Mounted at `/api/v1/lists` (auth required). */
 export const listsRouter = Router();
@@ -27,8 +28,8 @@ listsRouter.post("/", async (req, res) => {
   res.status(201).json({
     list: await listsService.create(requireUserId(req), body.boardId, {
       title: body.title,
-      beforeOrder: body.beforeOrder,
-      afterOrder: body.afterOrder,
+      beforeRank: body.beforeRank,
+      afterRank: body.afterRank,
     }),
   });
 });

@@ -65,7 +65,7 @@ export function Board({ boardId, cardId: routeCardId }: { boardId: string; cardI
     if (!board) return;
     const next = title.trim();
     if (!next || next === board.title) return;
-    updateBoard.mutate({ boardId, title: next }, { onError: (e) => setOpError(e instanceof ApiError ? e.message : "Something went wrong") });
+    updateBoard.mutate({ boardId, title: next, expectedVersion: board.version }, { onError: (e) => setOpError(e instanceof ApiError ? e.message : "Something went wrong") });
   };
 
   const visibleBoard = useMemo(() => (board ? filterBoard(board, filters) : board), [board, filters]);
@@ -140,7 +140,7 @@ export function Board({ boardId, cardId: routeCardId }: { boardId: string; cardI
                 size="sm"
                 className="hidden text-muted-foreground sm:inline-flex"
                 onClick={() =>
-                  updateBoard.mutate({ boardId, archived: !board.archivedAt }, { onError: (e) => setOpError(e instanceof ApiError ? e.message : "Something went wrong") })
+                  updateBoard.mutate({ boardId, archived: !board.archivedAt, expectedVersion: board.version }, { onError: (e) => setOpError(e instanceof ApiError ? e.message : "Something went wrong") })
                 }
               >
                 {board.archivedAt ? "Unarchive" : "Archive"}

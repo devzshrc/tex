@@ -81,6 +81,9 @@ export const board = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     // Soft-delete first; hard delete only from archived state.
     archivedAt: timestamp("archived_at"),
+    // Optimistic concurrency: every mutation bumps version; writers send
+    // the version they read and get 409 VERSION_CONFLICT on mismatch.
+    version: integer("version").default(1).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -95,19 +98,24 @@ export const list = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     title: text("title").notNull(),
-    // Fractional position; see src/common/order.ts.
-    order: doublePrecision("order").notNull(),
+    // Fractional rank; see src/common/lexorank.ts. Default is rankAt(0);
+    // a backfill assigns true positions (scripts/backfill-ranks.ts).
+    rank: text("rank").notNull().default("05000001.5"),
+    // DEPRECATED (expand phase): float positions, kept only for the
+    // rank backfill. Code must use `rank`. Dropped in a later migration.
+    order: doublePrecision("order"),
     boardId: uuid("board_id")
       .notNull()
       .references(() => board.id, { onDelete: "cascade" }),
     archivedAt: timestamp("archived_at"),
+    version: integer("version").default(1).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (t) => [index("list_board_order_idx").on(t.boardId, t.order)],
+  (t) => [index("list_board_rank_idx").on(t.boardId, t.rank)],
 );
 
 export const card = pgTable(
@@ -116,7 +124,12 @@ export const card = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     title: text("title").notNull(),
     description: text("description"),
-    order: doublePrecision("order").notNull(),
+    // Fractional rank; see src/common/lexorank.ts. Default is rankAt(0);
+    // a backfill assigns true positions (scripts/backfill-ranks.ts).
+    rank: text("rank").notNull().default("05000001.5"),
+    // DEPRECATED (expand phase): float positions, kept only for the
+    // rank backfill. Code must use `rank`. Dropped in a later migration.
+    order: doublePrecision("order"),
     listId: uuid("list_id")
       .notNull()
       .references(() => list.id, { onDelete: "cascade" }),
@@ -131,13 +144,15 @@ export const card = pgTable(
     storyPoints: integer("story_points"),
     isTemplate: boolean("is_template").default(false).notNull(),
     archivedAt: timestamp("archived_at"),
+    version: integer("version").default(1).notNull(),
+    lastReminderAt: timestamp("last_reminder_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (t) => [index("card_list_order_idx").on(t.listId, t.order), index("card_due_idx").on(t.dueAt)],
+  (t) => [index("card_list_rank_idx").on(t.listId, t.rank), index("card_due_idx").on(t.dueAt)],
 );
 
 /** Board-scoped color tags. Color is a palette key validated app-side. */
@@ -175,13 +190,18 @@ export const checklist = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     title: text("title").notNull(),
-    order: doublePrecision("order").notNull(),
+    // Fractional rank; see src/common/lexorank.ts. Default is rankAt(0);
+    // a backfill assigns true positions (scripts/backfill-ranks.ts).
+    rank: text("rank").notNull().default("05000001.5"),
+    // DEPRECATED (expand phase): float positions, kept only for the
+    // rank backfill. Code must use `rank`. Dropped in a later migration.
+    order: doublePrecision("order"),
     cardId: uuid("card_id")
       .notNull()
       .references(() => card.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("checklist_card_order_idx").on(t.cardId, t.order)],
+  (t) => [index("checklist_card_rank_idx").on(t.cardId, t.rank)],
 );
 
 export const checklistItem = pgTable(
@@ -190,7 +210,12 @@ export const checklistItem = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     text: text("text").notNull(),
     complete: boolean("complete").default(false).notNull(),
-    order: doublePrecision("order").notNull(),
+    // Fractional rank; see src/common/lexorank.ts. Default is rankAt(0);
+    // a backfill assigns true positions (scripts/backfill-ranks.ts).
+    rank: text("rank").notNull().default("05000001.5"),
+    // DEPRECATED (expand phase): float positions, kept only for the
+    // rank backfill. Code must use `rank`. Dropped in a later migration.
+    order: doublePrecision("order"),
     checklistId: uuid("checklist_id")
       .notNull()
       .references(() => checklist.id, { onDelete: "cascade" }),
@@ -202,7 +227,7 @@ export const checklistItem = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (t) => [index("checklist_item_list_order_idx").on(t.checklistId, t.order)],
+  (t) => [index("checklist_item_rank_idx").on(t.checklistId, t.rank)],
 );
 
 export const attachment = pgTable(
@@ -250,7 +275,12 @@ export const customFieldDef = pgTable(
     type: customFieldType("type").notNull(),
     // SELECT only: ordered choice list.
     options: jsonb("options").$type<string[] | null>(),
-    order: doublePrecision("order").notNull(),
+    // Fractional rank; see src/common/lexorank.ts. Default is rankAt(0);
+    // a backfill assigns true positions (scripts/backfill-ranks.ts).
+    rank: text("rank").notNull().default("05000001.5"),
+    // DEPRECATED (expand phase): float positions, kept only for the
+    // rank backfill. Code must use `rank`. Dropped in a later migration.
+    order: doublePrecision("order"),
     boardId: uuid("board_id")
       .notNull()
       .references(() => board.id, { onDelete: "cascade" }),
@@ -279,6 +309,89 @@ export const customFieldValue = pgTable(
       .notNull(),
   },
   (t) => [uniqueIndex("custom_field_value_unique").on(t.cardId, t.fieldId)],
+);
+
+/**
+ * Transactional outbox: durable side-effect intents written atomically
+ * with the domain change, then relayed by a worker (see src/workers/).
+ * boardId/organizationId ride along so the relay fans out without joins.
+ * Emitting is fire-and-forget for request latency; delivery is the
+ * relay's job (realtime broadcast, notifications, audit, email).
+ */
+export const outbox = pgTable(
+  "outbox",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    aggregate: text("aggregate").notNull(),
+    aggregateId: text("aggregate_id").notNull(),
+    boardId: uuid("board_id"),
+    organizationId: uuid("organization_id"),
+    type: text("type").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown> | null>(),
+    actorId: text("actor_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    claimedAt: timestamp("claimed_at"),
+    attempts: integer("attempts").default(0).notNull(),
+    nextRunAt: timestamp("next_run_at").defaultNow().notNull(),
+    processedAt: timestamp("processed_at"),
+  },
+  (t) => [index("outbox_pending_idx").on(t.processedAt, t.nextRunAt)],
+);
+
+/**
+ * Audit spine projection: who did what to which org entity, with request
+ * context. Written by the relay (never inline), append-only, no API
+ * deletes. Retention is a scheduled sweep, not user action.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    entity: text("entity").notNull(),
+    entityId: text("entity_id").notNull(),
+    meta: jsonb("meta").$type<Record<string, unknown> | null>(),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
+    // Exactly-once relay: one audit row per outbox row, retries conflict away.
+    outboxId: uuid("outbox_id").unique(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("audit_log_org_created_idx").on(t.organizationId, t.createdAt)],
+);
+
+export const notificationType = pgEnum("notification_type", [
+  "ASSIGNED",
+  "MENTIONED",
+  "COMMENTED",
+  "VOTED",
+  "DUE_SOON",
+  "INVITED",
+]);
+export type NotificationType = (typeof notificationType.enumValues)[number];
+
+export const notification = pgTable(
+  "notification",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    type: notificationType("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    cardId: uuid("card_id").references(() => card.id, { onDelete: "cascade" }),
+    boardId: uuid("board_id").references(() => board.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at"),
+    // Exactly-once relay, same pattern as audit_log.
+    outboxId: uuid("outbox_id").unique(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("notification_user_created_idx").on(t.userId, t.createdAt), index("notification_user_read_idx").on(t.userId, t.readAt)],
 );
 
 export const cardAssignee = pgTable(

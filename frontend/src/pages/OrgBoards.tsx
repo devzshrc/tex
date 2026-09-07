@@ -145,7 +145,7 @@ export function OrgBoards({ orgId }: { orgId: string }) {
                         className="h-7"
                         onClick={() =>
                           updateBoard.mutate(
-                            { boardId: board.id, archived: false },
+                            { boardId: board.id, archived: false, expectedVersion: board.version },
                             { onError: (e) => setOpError(e instanceof ApiError ? e.message : "Something went wrong") },
                           )
                         }

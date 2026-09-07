@@ -1,9 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, asc, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { db } from "../../config/database";
-import { orgInvite, orgMember, organization } from "../../db/schema/trello";
+import { auditLog, orgInvite, orgMember, organization } from "../../db/schema/trello";
 import { user } from "../../db/schema/auth";
 import { badRequest, conflict, isUniqueViolation, notFound } from "../../common/errors";
+import { emitOutbox } from "../../common/outbox";
 import { assertOrgAdmin, assertOrgMember, countAdmins } from "./org-access";
 
 const SLUG_RE = /^[a-z0-9-]{3,48}$/;
@@ -111,6 +112,7 @@ export const organizationsService = {
         const [created] = await tx.insert(organization).values({ name: input.name, slug: free }).returning();
         if (!created) throw new Error("Organization insert failed");
         await tx.insert(orgMember).values({ userId, organizationId: created.id, role: "ADMIN" });
+        await emitOutbox(tx, { aggregate: "member", aggregateId: created.id, organizationId: created.id, type: "ORG_CREATED", payload: { name: input.name, slug: free }, actorId: userId });
         return [created];
       });
       if (!org) throw new Error("Organization insert failed");
@@ -179,11 +181,12 @@ export const organizationsService = {
     if (target.role === "ADMIN" && role === "MEMBER" && (await countAdmins(organizationId)) <= 1) {
       throw conflict("LAST_ADMIN", "Cannot demote the last admin");
     }
-    const [updated] = await db
-      .update(orgMember)
-      .set({ role })
-      .where(eq(orgMember.id, target.id))
-      .returning();
+    const [updated] = await db.transaction(async (tx) => {
+      const [row] = await tx.update(orgMember).set({ role }).where(eq(orgMember.id, target.id)).returning();
+      if (!row) throw notFound("Member not found");
+      await emitOutbox(tx, { aggregate: "member", aggregateId: target.id, organizationId, type: "MEMBER_ROLE_CHANGED", payload: { userId: targetUserId, from: target.role, to: role }, actorId: adminId });
+      return [row];
+    });
     return updated;
   },
 
@@ -204,7 +207,10 @@ export const organizationsService = {
     }
     // Assignment rows survive removal (assignee display falls back to the
     // auth profile with a "former member" badge client-side).
-    await db.delete(orgMember).where(eq(orgMember.id, target.id));
+    await db.transaction(async (tx) => {
+      await tx.delete(orgMember).where(eq(orgMember.id, target.id));
+      await emitOutbox(tx, { aggregate: "member", aggregateId: target.id, organizationId, type: "MEMBER_REMOVED", payload: { userId: targetUserId }, actorId });
+    });
   },
 
   async invite(adminId: string, organizationId: string, input: { email: string; role: "ADMIN" | "MEMBER" }) {
@@ -234,18 +240,28 @@ export const organizationsService = {
       .limit(1);
     if (pending) {
       // Resend semantics: rotate token + extend expiry instead of duplicates.
-      const [refreshed] = await db
-        .update(orgInvite)
-        .set({ token: tokenHash, expiresAt, role: input.role })
-        .where(eq(orgInvite.id, pending.id))
-        .returning();
+      const [refreshed] = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(orgInvite)
+          .set({ token: tokenHash, expiresAt, role: input.role })
+          .where(eq(orgInvite.id, pending.id))
+          .returning();
+        if (!row) throw new Error("Invite refresh failed");
+        await emitOutbox(tx, { aggregate: "invite", aggregateId: pending.id, organizationId, type: "INVITE_CREATED", payload: { email, role: input.role }, actorId: adminId });
+        return [row];
+      });
       if (!refreshed) throw new Error("Invite refresh failed");
       return { ...refreshed, token };
     }
-    const [created] = await db
-      .insert(orgInvite)
-      .values({ email, role: input.role, token: tokenHash, expiresAt, organizationId, invitedBy: adminId })
-      .returning();
+    const [created] = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(orgInvite)
+        .values({ email, role: input.role, token: tokenHash, expiresAt, organizationId, invitedBy: adminId })
+        .returning();
+      if (!row) throw new Error("Invite insert failed");
+      await emitOutbox(tx, { aggregate: "invite", aggregateId: row.id, organizationId, type: "INVITE_CREATED", payload: { email, role: input.role }, actorId: adminId });
+      return [row];
+    });
     if (!created) throw new Error("Invite insert failed");
     return { ...created, token };
   },
@@ -267,6 +283,40 @@ export const organizationsService = {
       .from(orgInvite)
       .where(eq(orgInvite.organizationId, organizationId))
       .orderBy(asc(orgInvite.createdAt));
+  },
+
+  /** Admin audit trail (keyset over createdAt desc). Append-only by design. */
+  async listAudit(userId: string, organizationId: string, input: { limit: number; cursor?: string }) {
+    await assertOrgAdmin(userId, organizationId);
+    let anchor: { createdAt: Date; id: string } | null = null;
+    if (input.cursor) {
+      const [found] = await db
+        .select({ createdAt: auditLog.createdAt, id: auditLog.id })
+        .from(auditLog)
+        .where(eq(auditLog.id, input.cursor))
+        .limit(1);
+      anchor = found ?? null;
+    }
+    const base = eq(auditLog.organizationId, organizationId);
+    const where = anchor
+      ? and(
+          base,
+          or(
+            lt(auditLog.createdAt, anchor.createdAt),
+            and(eq(auditLog.createdAt, anchor.createdAt), lt(auditLog.id, anchor.id)),
+          ),
+        )
+      : base;
+    const rows = await db
+      .select()
+      .from(auditLog)
+      .where(where)
+      .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
+      .limit(input.limit + 1);
+    return {
+      entries: rows.slice(0, input.limit),
+      nextCursor: rows.length > input.limit ? rows[input.limit - 1]?.id ?? null : null,
+    };
   },
 
   async revokeInvite(userId: string, organizationId: string, inviteId: string) {
@@ -298,6 +348,7 @@ export const organizationsService = {
         .values({ userId, organizationId: invite.organizationId, role: invite.role })
         .onConflictDoNothing({ target: [orgMember.userId, orgMember.organizationId] });
       await tx.update(orgInvite).set({ acceptedAt: new Date() }).where(eq(orgInvite.id, invite.id));
+      await emitOutbox(tx, { aggregate: "member", aggregateId: invite.id, organizationId: invite.organizationId, type: "MEMBER_ADDED", payload: { userId, role: invite.role }, actorId: userId });
       const [row] = await tx.select().from(organization).where(eq(organization.id, invite.organizationId)).limit(1);
       return row;
     });

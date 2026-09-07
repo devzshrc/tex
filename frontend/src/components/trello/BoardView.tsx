@@ -13,10 +13,11 @@ import {
 import { SortableContext, arrayMove, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api";
-import { keyBetween } from "@/lib/order";
+import { ApiError, api } from "@/lib/api";
+import { rankBetween } from "@/lib/rank";
 import { keys, useCreateList } from "@/lib/trello-queries";
 import type { BoardDetail, BoardList } from "@/lib/trello";
 import { CardRow } from "./CardRow";
@@ -26,6 +27,10 @@ type Active = { kind: "card" | "list"; id: string } | null;
 
 function findCardList(board: BoardDetail, cardId: string): BoardList | undefined {
   return board.lists.find((l) => l.cards.some((c) => c.id === cardId));
+}
+
+function isVersionConflict(err: unknown): boolean {
+  return err instanceof ApiError && err.code === "VERSION_CONFLICT";
 }
 
 export function BoardView({
@@ -42,7 +47,10 @@ export function BoardView({
   const qc = useQueryClient();
   const boardKey = keys.board(boardId, includeArchived);
   const [active, setActive] = useState<Active>(null);
-  const origin = useRef<{ listId: string | null; index: number }>({ listId: null, index: -1 });
+  const origin = useRef<{ listId: string | null; index: number; version: number }>({ listId: null, index: -1, version: -1 });
+  // Pre-mutation snapshot for rollback: on non-conflict failure the server
+  // is untouched (mutations are atomic), so restoring is exact.
+  const snapshot = useRef<BoardDetail | null>(null);
   const [addingList, setAddingList] = useState(false);
   const [listTitle, setListTitle] = useState("");
   const createList = useCreateList(boardId);
@@ -53,24 +61,58 @@ export function BoardView({
   const setBoard = (fn: (b: BoardDetail) => BoardDetail) => {
     qc.setQueryData<BoardDetail>(boardKey, (old) => (old ? fn(old) : old));
   };
+  const takeSnapshot = () => {
+    const b = getBoard();
+    snapshot.current = b ? structuredClone(b) : null;
+  };
+  const restoreSnapshot = () => {
+    if (snapshot.current) qc.setQueryData(boardKey, snapshot.current);
+  };
+  const refreshBoard = () => qc.invalidateQueries({ queryKey: boardKey });
 
-  const persist = useMutation({
-    mutationFn: (v: { path: string; body: unknown }) => api.post<{ list?: unknown; card?: unknown }>(v.path, v.body),
-    onError: () => qc.invalidateQueries({ queryKey: boardKey }),
-    onSettled: () => qc.invalidateQueries({ queryKey: boardKey }),
+  const persistMove = useMutation({
+    mutationFn: (v: { cardId: string; toListId: string; beforeRank: string | null; afterRank: string | null; expectedVersion: number }) =>
+      api.post(`/cards/${v.cardId}/move`, { toListId: v.toListId, beforeRank: v.beforeRank, afterRank: v.afterRank, expectedVersion: v.expectedVersion }),
+    onSuccess: () => refreshBoard(),
+    onError: (err) => {
+      if (isVersionConflict(err)) {
+        refreshBoard();
+        toast.info("This card changed elsewhere — board refreshed.");
+      } else {
+        restoreSnapshot();
+        toast.error("Couldn't save the move — restored.");
+      }
+    },
+  });
+
+  const persistListMove = useMutation({
+    mutationFn: (v: { listId: string; beforeRank: string | null; afterRank: string | null; expectedVersion: number }) =>
+      api.post(`/lists/${v.listId}/position`, { beforeRank: v.beforeRank, afterRank: v.afterRank, expectedVersion: v.expectedVersion }),
+    onSuccess: () => refreshBoard(),
+    onError: (err) => {
+      if (isVersionConflict(err)) {
+        refreshBoard();
+        toast.info("This list changed elsewhere — board refreshed.");
+      } else {
+        restoreSnapshot();
+        toast.error("Couldn't save the move — restored.");
+      }
+    },
   });
 
   const onDragStart = (e: DragStartEvent) => {
     const id = String(e.active.id);
     const b = getBoard();
     if (!b) return;
-    if (b.lists.some((l) => l.id === id)) {
-      origin.current = { listId: null, index: b.lists.findIndex((l) => l.id === id) };
+    const listIdx = b.lists.findIndex((l) => l.id === id);
+    if (listIdx >= 0) {
+      origin.current = { listId: null, index: listIdx, version: b.lists[listIdx]?.version ?? -1 };
       setActive({ kind: "list", id });
     } else {
       const host = findCardList(b, id);
       if (!host) return;
-      origin.current = { listId: host.id, index: host.cards.findIndex((c) => c.id === id) };
+      const card = host.cards.find((c) => c.id === id);
+      origin.current = { listId: host.id, index: host.cards.findIndex((c) => c.id === id), version: card?.version ?? -1 };
       setActive({ kind: "card", id });
     }
   };
@@ -122,21 +164,22 @@ export function BoardView({
     setActive(null);
     if (!current) return;
     const b = getBoard();
-    if (!b) return;
+    if (!b || origin.current.version < 0) return;
 
     if (current.kind === "list") {
       const ids = b.lists.map((l) => l.id);
       const from = origin.current.index;
       const to = ids.indexOf(current.id);
       if (from < 0 || to < 0 || from === to) return;
-      const prev = b.lists[to - 1]?.order ?? null;
-      const next = b.lists[to + 1]?.order ?? null;
-      const order = keyBetween(prev, next);
+      const prev = b.lists[to - 1]?.rank ?? null;
+      const next = b.lists[to + 1]?.rank ?? null;
+      const rank = rankBetween(prev, next);
+      takeSnapshot();
       setBoard((old) => ({
         ...old,
-        lists: old.lists.map((l) => (l.id === current.id ? { ...l, order } : l)),
+        lists: old.lists.map((l) => (l.id === current.id ? { ...l, rank } : l)),
       }));
-      persist.mutate({ path: `/lists/${current.id}/position`, body: { beforeOrder: prev, afterOrder: next } });
+      persistListMove.mutate({ listId: current.id, beforeRank: prev, afterRank: next, expectedVersion: origin.current.version });
       return;
     }
 
@@ -144,18 +187,19 @@ export function BoardView({
     if (!host) return;
     const index = host.cards.findIndex((c) => c.id === current.id);
     if (origin.current.listId === host.id && origin.current.index === index) return;
-    const before = host.cards[index - 1]?.order ?? null;
-    const after = host.cards[index + 1]?.order ?? null;
-    const order = keyBetween(before, after);
+    const before = host.cards[index - 1]?.rank ?? null;
+    const after = host.cards[index + 1]?.rank ?? null;
+    const rank = rankBetween(before, after);
+    takeSnapshot();
     setBoard((old) => ({
       ...old,
       lists: old.lists.map((l) =>
         l.id === host.id
-          ? { ...l, cards: l.cards.map((c) => (c.id === current.id ? { ...c, order } : c)) }
+          ? { ...l, cards: l.cards.map((c) => (c.id === current.id ? { ...c, rank } : c)) }
           : l,
       ),
     }));
-    persist.mutate({ path: `/cards/${current.id}/move`, body: { toListId: host.id, beforeOrder: before, afterOrder: after } });
+    persistMove.mutate({ cardId: current.id, toListId: host.id, beforeRank: before, afterRank: after, expectedVersion: origin.current.version });
   };
 
   const overlayCard = active?.kind === "card" ? (getBoard() ? findCardList(getBoard() as BoardDetail, active.id)?.cards.find((c) => c.id === active.id) ?? null : null) : null;

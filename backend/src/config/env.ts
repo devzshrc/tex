@@ -36,6 +36,8 @@ export const env = {
   FRONTEND_URL: read("FRONTEND_URL", "http://localhost:3000"),
   DATABASE_URL: read("DATABASE_URL", "postgresql://auth:auth@localhost:5433/authdb"),
   UPLOAD_DIR: read("UPLOAD_DIR", "./uploads"),
+  RELAY_ENABLED: read("RELAY_ENABLED", "true") === "true",
+  REDIS_URL: read("REDIS_URL", ""),
   GOOGLE_CLIENT_ID: read("GOOGLE_CLIENT_ID", ""),
   GOOGLE_CLIENT_SECRET: read("GOOGLE_CLIENT_SECRET", ""),
 };

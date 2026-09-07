@@ -6,12 +6,14 @@ export const apiBase = baseURL;
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
+  readonly details?: unknown;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, details?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -22,9 +24,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (res.status === 204) return undefined as T;
-  const body = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+  const body = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string; details?: unknown } };
   if (!res.ok) {
-    throw new ApiError(res.status, body.error?.code ?? "REQUEST_ERROR", body.error?.message ?? `Request failed (${res.status})`);
+    throw new ApiError(res.status, body.error?.code ?? "REQUEST_ERROR", body.error?.message ?? `Request failed (${res.status})`, body.error?.details);
   }
   return body as T;
 }

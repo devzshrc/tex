@@ -63,6 +63,7 @@ export const meService = {
         boardTitle: board.title,
         organizationId: organization.id,
         organizationName: organization.name,
+        version: card.version,
         updatedAt: card.updatedAt,
       })
       .from(cardAssignee)

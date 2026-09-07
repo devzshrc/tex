@@ -21,7 +21,7 @@ function TaskRow({ task }: { task: MyTask }) {
     <div className="flex items-center gap-2.5 p-3">
       <Checkbox
         checked={task.dueComplete}
-        onCheckedChange={(checked) => updateCard.mutate({ dueComplete: checked === true })}
+        onCheckedChange={(checked) => updateCard.mutate({ dueComplete: checked === true, expectedVersion: task.version })}
         aria-label={`Mark "${task.title}" ${task.dueComplete ? "incomplete" : "complete"}`}
       />
       <button onClick={() => navigate(`/b/${task.boardId}/c/${task.id}`)} className="min-w-0 flex-1 text-left">

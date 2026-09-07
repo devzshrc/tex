@@ -6,13 +6,13 @@ import { parseBody, requireUserId, titleField, userIdParam, uuidParam } from "..
 import { cardsService } from "./cards.service";
 import { attachmentsService } from "../attachments/attachments.service";
 
-const orderField = z.number().finite();
+const rankField = z.string().min(1).max(64);
 const createCardBody = z.object({
   listId: uuidParam,
   title: titleField(255),
   description: z.string().trim().max(20000).optional(),
-  beforeOrder: orderField.nullish(),
-  afterOrder: orderField.nullish(),
+  beforeRank: rankField.nullish(),
+  afterRank: rankField.nullish(),
 });
 const updateCardBody = z.object({
   title: titleField(255).optional(),
@@ -24,6 +24,7 @@ const updateCardBody = z.object({
   coverAttachmentId: z.string().uuid().nullable().optional(),
   storyPoints: z.number().int().min(0).max(9999).nullable().optional(),
   isTemplate: z.boolean().optional(),
+  expectedVersion: z.number().int().min(1),
 });
 const copyCardBody = z.object({
   toListId: uuidParam.optional(),
@@ -32,8 +33,9 @@ const copyCardBody = z.object({
 const customValueBody = z.object({ fieldId: uuidParam, value: z.unknown() });
 const moveCardBody = z.object({
   toListId: uuidParam,
-  beforeOrder: orderField.nullable(),
-  afterOrder: orderField.nullable(),
+  beforeRank: rankField.nullable(),
+  afterRank: rankField.nullable(),
+  expectedVersion: z.number().int().min(1),
 });
 const assigneeBody = z.object({ userId: z.string().min(1) });
 const commentBody = z.object({ text: z.string().trim().min(1, "must not be blank").max(5000) });
@@ -52,8 +54,8 @@ cardsRouter.post("/", async (req, res) => {
     card: await cardsService.create(requireUserId(req), body.listId, {
       title: body.title,
       description: body.description,
-      beforeOrder: body.beforeOrder,
-      afterOrder: body.afterOrder,
+      beforeRank: body.beforeRank,
+      afterRank: body.afterRank,
     }),
   });
 });

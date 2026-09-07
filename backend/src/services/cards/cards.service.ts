@@ -14,8 +14,9 @@ import {
   customFieldValue,
   list,
 } from "../../db/schema/trello";
-import { badRequest, conflict, forbidden, notFound, orNotFound } from "../../common/errors";
-import { keyAfterLast, keyBetween } from "../../common/order";
+import { badRequest, conflict, forbidden, notFound, orNotFound, versionConflict } from "../../common/errors";
+import { emitOutbox } from "../../common/outbox";
+import { rankAppend, rankBetween } from "../../common/lexorank";
 import {
   getMembership,
   loadCardContext,
@@ -94,14 +95,14 @@ async function logActivity(
   });
 }
 
-async function maxCardOrder(listId: string): Promise<number | null> {
+async function maxCardRank(listId: string): Promise<string | null> {
   const [row] = await db
-    .select({ order: card.order })
+    .select({ rank: card.rank })
     .from(card)
     .where(and(eq(card.listId, listId), isNull(card.archivedAt)))
-    .orderBy(desc(card.order))
+    .orderBy(desc(card.rank))
     .limit(1);
-  return row?.order ?? null;
+  return row?.rank ?? null;
 }
 
 /** Keyset page over (createdAt desc, id desc). Cursor is the last seen row id. */
@@ -131,22 +132,23 @@ export const cardsService = {
   async create(
     userId: string,
     listId: string,
-    input: { title: string; description?: string; beforeOrder?: number | null; afterOrder?: number | null },
+    input: { title: string; description?: string; beforeRank?: string | null; afterRank?: string | null },
   ) {
-    await loadListContext(userId, listId);
-    const order =
-      input.beforeOrder != null || input.afterOrder != null
-        ? keyBetween(input.beforeOrder ?? null, input.afterOrder ?? null)
-        : keyAfterLast(await maxCardOrder(listId));
+    const { scope: listScope, list: parentList } = await loadListContext(userId, listId);
+    const rank =
+      input.beforeRank != null || input.afterRank != null
+        ? rankBetween(input.beforeRank ?? null, input.afterRank ?? null)
+        : rankAppend(await maxCardRank(listId));
     const [created] = await orNotFound(
       () =>
         db.transaction(async (tx) => {
           const [row] = await tx
             .insert(card)
-            .values({ title: input.title, description: input.description ?? null, listId, order })
+            .values({ title: input.title, description: input.description ?? null, listId, rank })
             .returning();
           if (!row) throw new Error("Card insert failed");
           await logActivity(tx, { cardId: row.id, userId, action: "CREATED_CARD", details: { listId } });
+          await emitOutbox(tx, { aggregate: "card", aggregateId: row.id, boardId: parentList.boardId, organizationId: listScope.organizationId, type: "CARD_CREATED", payload: { listId, title: input.title }, actorId: userId });
           return [row];
         }),
       "List not found",
@@ -165,10 +167,10 @@ export const cardsService = {
         },
         cardLabels: { with: { label: true } },
         checklists: {
-          orderBy: (t, { asc }) => asc(t.order),
+          orderBy: (t, { asc }) => asc(t.rank),
           with: {
             items: {
-              orderBy: (t, { asc }) => asc(t.order),
+              orderBy: (t, { asc }) => asc(t.rank),
               with: { assignee: { columns: { id: true, name: true, email: true, image: true } } },
             },
           },
@@ -204,6 +206,7 @@ export const cardsService = {
       coverAttachmentId?: string | null;
       storyPoints?: number | null;
       isTemplate?: boolean;
+      expectedVersion: number;
     },
   ) {
     const { card: current } = await loadCardContext(userId, cardId);
@@ -236,8 +239,12 @@ export const cardsService = {
     if (input.storyPoints !== undefined) patch.storyPoints = input.storyPoints;
     if (input.isTemplate !== undefined) patch.isTemplate = input.isTemplate;
     const [updated] = await db.transaction(async (tx) => {
-      const [row] = await tx.update(card).set(patch).where(eq(card.id, cardId)).returning();
-      if (!row) throw notFound("Card not found");
+      const [row] = await tx
+        .update(card)
+        .set({ ...patch, version: current.version + 1 })
+        .where(and(eq(card.id, cardId), eq(card.version, input.expectedVersion)))
+        .returning();
+      if (!row) throw await versionConflict("Card", () => loadCardContext(userId, cardId).then((c) => c.card));
       if (input.title !== undefined && input.title !== current.title) {
         await logActivity(tx, { cardId, userId, action: "RENAMED_CARD", details: { from: current.title, to: input.title } });
       }
@@ -267,29 +274,31 @@ export const cardsService = {
   async move(
     userId: string,
     cardId: string,
-    input: { toListId: string; beforeOrder: number | null; afterOrder: number | null },
+    input: { toListId: string; beforeRank: string | null; afterRank: string | null; expectedVersion: number },
   ) {
     const { card: current, scope: source } = await loadCardContext(userId, cardId);
     const { scope: target } = await loadListContext(userId, input.toListId);
     if (source.organizationId !== target.organizationId) {
       throw badRequest("CROSS_ORG_MOVE", "Cards can only move between lists of the same organization");
     }
-    const order = keyBetween(input.beforeOrder, input.afterOrder);
+    const rank = rankBetween(input.beforeRank, input.afterRank);
     const [moved] = await orNotFound(
       () =>
         db.transaction(async (tx) => {
           const [row] = await tx
             .update(card)
-            .set({ listId: input.toListId, order, updatedAt: new Date() })
-            .where(eq(card.id, cardId))
+            .set({ listId: input.toListId, rank, updatedAt: new Date(), version: current.version + 1 })
+            .where(and(eq(card.id, cardId), eq(card.version, input.expectedVersion)))
             .returning();
-          if (!row) throw notFound("Card not found");
+          if (!row) throw await versionConflict("Card", () => loadCardContext(userId, cardId).then((c) => c.card));
           await logActivity(tx, {
             cardId,
             userId,
             action: "MOVED_CARD",
-            details: { fromListId: current.listId, toListId: input.toListId, fromOrder: current.order, toOrder: order },
+            details: { fromListId: current.listId, toListId: input.toListId, fromRank: current.rank, toRank: rank },
           });
+          const [movedBoard] = await tx.select({ boardId: board.id }).from(card).innerJoin(list, eq(card.listId, list.id)).innerJoin(board, eq(list.boardId, board.id)).where(eq(card.id, cardId)).limit(1);
+          await emitOutbox(tx, { aggregate: "card", aggregateId: cardId, boardId: movedBoard?.boardId ?? null, organizationId: source.organizationId, type: "CARD_MOVED", payload: { fromListId: current.listId, toListId: input.toListId }, actorId: userId });
           return [row];
         }),
       "List not found",
@@ -299,10 +308,13 @@ export const cardsService = {
 
   /** Hard delete: admin only, and only from archived state (archive-first). */
   async remove(userId: string, cardId: string) {
-    const { scope, card: row } = await loadCardContext(userId, cardId);
+    const { scope, card: row, boardId } = await loadCardContext(userId, cardId);
     requireAdmin(scope);
     if (!row.archivedAt) throw conflict("ARCHIVE_FIRST", "Archive the card before deleting it");
-    await db.delete(card).where(eq(card.id, cardId));
+    await db.transaction(async (tx) => {
+      await tx.delete(card).where(eq(card.id, cardId));
+      await emitOutbox(tx, { aggregate: "card", aggregateId: cardId, boardId, organizationId: scope.organizationId, type: "CARD_DELETED", payload: { title: row.title }, actorId: userId });
+    });
   },
 
   /**
@@ -333,7 +345,7 @@ export const cardsService = {
     });
     if (!source) throw notFound("Card not found");
     const destListId = toListId ?? source.listId;
-    const order = keyAfterLast(await maxCardOrder(destListId));
+    const rank = rankAppend(await maxCardRank(destListId));
     const [created] = await orNotFound(
       () =>
         db.transaction(async (tx) => {
@@ -343,7 +355,7 @@ export const cardsService = {
               title: input.title?.trim() || `Copy of ${source.title}`,
               description: source.description,
               listId: destListId,
-              order,
+              rank,
               dueAt: source.dueAt,
               dueComplete: false,
               coverColor: source.coverColor,
@@ -361,7 +373,7 @@ export const cardsService = {
           for (const cl of source.checklists) {
             const [list] = await tx
               .insert(checklist)
-              .values({ title: cl.title, cardId: row.id, order: cl.order })
+              .values({ title: cl.title, cardId: row.id, rank: cl.rank })
               .returning({ id: checklist.id });
             if (!list) throw new Error("Checklist copy failed");
             if (cl.items.length > 0) {
@@ -369,7 +381,7 @@ export const cardsService = {
                 cl.items.map((it) => ({
                   text: it.text,
                   complete: it.complete,
-                  order: it.order,
+                  rank: it.rank,
                   checklistId: list.id,
                   assigneeUserId: it.assigneeUserId,
                 })),
@@ -421,7 +433,7 @@ export const cardsService = {
 
   /** Toggle vote; returns the new state + count. */
   async toggleVote(userId: string, cardId: string) {
-    await loadCardContext(userId, cardId);
+    const { scope, boardId } = await loadCardContext(userId, cardId);
     const result = await db.transaction(async (tx) => {
       const [existing] = await tx
         .select({ id: cardVote.id })
@@ -435,6 +447,7 @@ export const cardsService = {
       }
       await tx.insert(cardVote).values({ cardId, userId }).onConflictDoNothing();
       await logActivity(tx, { cardId, userId, action: "VOTED" });
+      await emitOutbox(tx, { aggregate: "card", aggregateId: cardId, boardId, organizationId: scope.organizationId, type: "CARD_VOTED", payload: { voterId: userId }, actorId: userId });
       return true;
     });
     const [countRow] = await db
@@ -486,6 +499,12 @@ export const cardsService = {
       }
       return false;
     });
+    if (inserted) {
+      const ctx = await loadCardContext(userId, cardId);
+      await db.transaction(async (tx) => {
+        await emitOutbox(tx, { aggregate: "card", aggregateId: cardId, boardId: ctx.boardId, organizationId: ctx.scope.organizationId, type: "CARD_ASSIGNED", payload: { assigneeUserId }, actorId: userId });
+      });
+    }
     return { assigned: inserted };
   },
 
@@ -551,11 +570,12 @@ export const cardsService = {
   },
 
   async addComment(userId: string, cardId: string, text: string) {
-    await loadCardContext(userId, cardId);
+    const { scope, boardId } = await loadCardContext(userId, cardId);
     const [comment] = await db.transaction(async (tx) => {
       const [row] = await tx.insert(cardComment).values({ cardId, userId, text }).returning();
       if (!row) throw new Error("Comment insert failed");
       await logActivity(tx, { cardId, userId, action: "COMMENT_ADDED", details: { commentId: row.id } });
+      await emitOutbox(tx, { aggregate: "comment", aggregateId: row.id, boardId, organizationId: scope.organizationId, type: "COMMENT_ADDED", payload: { cardId, commentId: row.id }, actorId: userId });
       return [row];
     });
     return comment;

@@ -1,34 +1,34 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "../../config/database";
 import { board, list } from "../../db/schema/trello";
-import { badRequest, conflict, notFound, orNotFound } from "../../common/errors";
-import { keyAfterLast, keyBetween } from "../../common/order";
+import { badRequest, conflict, notFound, orNotFound, versionConflict } from "../../common/errors";
+import { rankAppend, rankBetween } from "../../common/lexorank";
 import { loadBoardContext, loadListContext, requireAdmin } from "../organizations/org-access";
 
-async function maxListOrder(boardId: string): Promise<number | null> {
+async function maxListRank(boardId: string): Promise<string | null> {
   const [row] = await db
-    .select({ order: list.order })
+    .select({ rank: list.rank })
     .from(list)
     .where(and(eq(list.boardId, boardId), isNull(list.archivedAt)))
-    .orderBy(desc(list.order))
+    .orderBy(desc(list.rank))
     .limit(1);
-  return row?.order ?? null;
+  return row?.rank ?? null;
 }
 
 export const listsService = {
   async create(
     userId: string,
     boardId: string,
-    input: { title: string; beforeOrder?: number | null; afterOrder?: number | null },
+    input: { title: string; beforeRank?: string | null; afterRank?: string | null },
   ) {
     // Scope + board existence resolved together; FK maps a concurrent delete.
     await loadBoardContext(userId, boardId);
-    const order =
-      input.beforeOrder != null || input.afterOrder != null
-        ? keyBetween(input.beforeOrder ?? null, input.afterOrder ?? null)
-        : keyAfterLast(await maxListOrder(boardId));
+    const rank =
+      input.beforeRank != null || input.afterRank != null
+        ? rankBetween(input.beforeRank ?? null, input.afterRank ?? null)
+        : rankAppend(await maxListRank(boardId));
     const [created] = await orNotFound(
-      () => db.insert(list).values({ title: input.title, boardId, order }).returning(),
+      () => db.insert(list).values({ title: input.title, boardId, rank }).returning(),
       "Board not found",
     );
     if (!created) throw new Error("List insert failed");
@@ -38,7 +38,7 @@ export const listsService = {
   async update(
     userId: string,
     listId: string,
-    input: { title?: string; archived?: boolean; boardId?: string },
+    input: { title?: string; archived?: boolean; boardId?: string; expectedVersion: number },
   ) {
     const { scope, list: current } = await loadListContext(userId, listId);
     const patch: Partial<typeof list.$inferInsert> = { updatedAt: new Date() };
@@ -56,27 +56,35 @@ export const listsService = {
         throw badRequest("CROSS_ORG_MOVE", "Lists can only move between boards of the same organization");
       }
       patch.boardId = input.boardId;
-      patch.order = keyAfterLast(await maxListOrder(input.boardId));
+      patch.rank = rankAppend(await maxListRank(input.boardId));
     }
     const [updated] = await orNotFound(
-      () => db.update(list).set(patch).where(eq(list.id, listId)).returning(),
+      () =>
+        db
+          .update(list)
+          .set({ ...patch, version: current.version + 1 })
+          .where(and(eq(list.id, listId), eq(list.version, input.expectedVersion)))
+          .returning(),
       "Board not found",
     );
-    // The row existed at scope resolution; a missing update means a
-    // concurrent delete won the race.
-    if (!updated) throw notFound("List not found");
+    // Empty update with a live row means the version guard tripped.
+    if (!updated) throw await versionConflict("List", () => loadListContext(userId, listId).then((c) => c.list));
     return updated;
   },
 
-  async reposition(userId: string, listId: string, input: { beforeOrder: number | null; afterOrder: number | null }) {
-    await loadListContext(userId, listId);
-    const order = keyBetween(input.beforeOrder, input.afterOrder);
+  async reposition(
+    userId: string,
+    listId: string,
+    input: { beforeRank: string | null; afterRank: string | null; expectedVersion: number },
+  ) {
+    const { list: current } = await loadListContext(userId, listId);
+    const rank = rankBetween(input.beforeRank, input.afterRank);
     const [updated] = await db
       .update(list)
-      .set({ order, updatedAt: new Date() })
-      .where(eq(list.id, listId))
+      .set({ rank, updatedAt: new Date(), version: current.version + 1 })
+      .where(and(eq(list.id, listId), eq(list.version, input.expectedVersion)))
       .returning();
-    if (!updated) throw notFound("List not found");
+    if (!updated) throw await versionConflict("List", () => loadListContext(userId, listId).then((c) => c.list));
     return updated;
   },
 

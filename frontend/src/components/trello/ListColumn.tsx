@@ -54,7 +54,7 @@ export function ListColumn({
       return;
     }
     updateList.mutate(
-      { listId: list.id, title: next },
+      { listId: list.id, title: next, expectedVersion: list.version },
       { onError: (e) => { setError(err(e)); setTitle(list.title); } },
     );
   };
@@ -62,7 +62,7 @@ export function ListColumn({
   const toggleArchive = () => {
     setError(null);
     updateList.mutate(
-      { listId: list.id, archived: !list.archivedAt },
+      { listId: list.id, archived: !list.archivedAt, expectedVersion: list.version },
       { onError: (e) => setError(err(e)) },
     );
   };

@@ -29,6 +29,20 @@
       "when": 1788725524504,
       "tag": "0003_amazing_captain_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788758100550,
+      "tag": "0004_gorgeous_reaper",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788759057566,
+      "tag": "0005_yellow_scorpion",
+      "breakpoints": true
     }
   ]
 }

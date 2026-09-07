@@ -87,7 +87,7 @@ export function AttachmentsSection({ boardId, cardId, onError }: { boardId: stri
                 variant="ghost"
                 size="sm"
                 className="h-7 shrink-0 text-muted-foreground"
-                onClick={() => updateCard.mutate({ coverAttachmentId: a.id }, { onError: (e) => onError(e) })}
+                onClick={() => updateCard.mutate({ coverAttachmentId: a.id, expectedVersion: card?.version ?? 1 }, { onError: (e) => onError(e) })}
               >
                 <ImagePlus className="size-3.5" />
                 Cover

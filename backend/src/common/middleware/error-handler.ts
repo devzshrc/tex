@@ -22,7 +22,13 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   // HttpError messages are curated, so they're safe to expose at any status.
   if (err instanceof HttpError) {
     if (err.status >= 500) logger.error("Request failed", err);
-    res.status(err.status).json({ error: { code: err.code, message: err.message } });
+    res.status(err.status).json({
+      error: {
+        code: err.code,
+        message: err.message,
+        ...(err.details !== undefined ? { details: err.details } : {}),
+      },
+    });
     return;
   }
   // Multer (multipart uploads) reports outside HttpError — normalize it.

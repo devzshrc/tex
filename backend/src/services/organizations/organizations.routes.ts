@@ -12,6 +12,10 @@ const inviteBody = z.object({
   role: z.enum(["ADMIN", "MEMBER"]).default("MEMBER"),
 });
 const acceptBody = z.object({ token: z.string().min(1) });
+const pageQueryLike = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.string().uuid().optional(),
+});
 
 /** Org workspace service. Mounted at `/api/v1/organizations` (auth required). */
 export const organizationsRouter = Router();
@@ -84,6 +88,12 @@ organizationsRouter.post("/:orgId/invites", async (req, res) => {
 organizationsRouter.get("/:orgId/invites", async (req, res) => {
   const orgId = parseBody(uuidParam, req.params.orgId);
   res.json({ invites: await organizationsService.listInvites(requireUserId(req), orgId) });
+});
+
+organizationsRouter.get("/:orgId/audit", async (req, res) => {
+  const orgId = parseBody(uuidParam, req.params.orgId);
+  const query = parseBody(pageQueryLike, req.query);
+  res.json(await organizationsService.listAudit(requireUserId(req), orgId, query));
 });
 
 organizationsRouter.delete("/:orgId/invites/:inviteId", async (req, res) => {

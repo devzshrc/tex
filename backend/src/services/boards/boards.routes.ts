@@ -5,7 +5,7 @@ import { parseBody, requireUserId, titleField, uuidParam } from "../../common/va
 import { boardsService } from "./boards.service";
 
 const createBoardBody = z.object({ organizationId: uuidParam, title: titleField(120) });
-const updateBoardBody = z.object({ title: titleField(120).optional(), archived: z.boolean().optional() });
+const updateBoardBody = z.object({ title: titleField(120).optional(), archived: z.boolean().optional(), expectedVersion: z.number().int().min(1) });
 
 function includeArchived(req: { query: unknown }): boolean {
   const parsed = z.object({ includeArchived: z.enum(["true", "false"]).default("false") }).parse(req.query);

@@ -228,12 +228,36 @@ export function CardModal({ boardId, cardId, onClose }: { boardId: string; cardI
 
   const isAdmin = org?.myRole === "ADMIN";
 
+  // Text-conflict dialog state: someone else saved first. Drafts stay in
+  // local state (never discarded), user picks reload vs save-on-top.
+  const [conflict, setConflict] = useState<{ kind: "title" | "description"; value: string; version: number } | null>(null);
+
+  const saveText = (kind: "title" | "description", value: string | null, version?: number) => {
+    const v = version ?? card?.version;
+    if (v == null || !card) return;
+    updateCard.mutate(
+      (kind === "title" ? { title: value as string } : { description: value }) as { title?: string; description?: string | null; expectedVersion: number },
+      {
+        onError: (e) => {
+          if (e instanceof ApiError && e.code === "VERSION_CONFLICT") {
+            const fresh = (e.details as { current?: { version?: number } } | undefined)?.current?.version;
+            if (fresh != null) {
+              setConflict({ kind, value: value ?? "", version: fresh });
+              return;
+            }
+          }
+          setOpError(err(e));
+        },
+      },
+    );
+  };
+
   const commitTitle = () => {
     setEditingTitle(false);
     if (!card) return;
     const next = title.trim();
     if (!next || next === card.title) return;
-    updateCard.mutate({ title: next }, { onError: (e) => setOpError(err(e)) });
+    saveText("title", next);
   };
 
   const commitDescription = () => {
@@ -241,7 +265,7 @@ export function CardModal({ boardId, cardId, onClose }: { boardId: string; cardI
     if (!card) return;
     const next = description.trim();
     if ((next || null) === card.description) return;
-    updateCard.mutate({ description: next || null }, { onError: (e) => setOpError(err(e)) });
+    saveText("description", next || null);
   };
 
   const submitComment = () => {
@@ -328,12 +352,12 @@ export function CardModal({ boardId, cardId, onClose }: { boardId: string; cardI
                       placeholder="–"
                       onBlur={(e) => {
                         if (e.target.value === "") {
-                          if (card.storyPoints !== null) updateCard.mutate({ storyPoints: null }, { onError: (e) => setOpError(err(e)) });
+                          if (card.storyPoints !== null) updateCard.mutate({ storyPoints: null, expectedVersion: card.version }, { onError: (e) => setOpError(err(e)) });
                           return;
                         }
                         const next = Number(e.target.value);
                         if (Number.isInteger(next) && next >= 0 && next <= 9999 && next !== card.storyPoints) {
-                          updateCard.mutate({ storyPoints: next }, { onError: (e) => setOpError(err(e)) });
+                          updateCard.mutate({ storyPoints: next, expectedVersion: card.version }, { onError: (e) => setOpError(err(e)) });
                         }
                       }}
                       className="h-6 w-14 px-1.5 text-[11px] tabular-nums"
@@ -350,6 +374,41 @@ export function CardModal({ boardId, cardId, onClose }: { boardId: string; cardI
                 </span>
               </div>
             </SheetHeader>
+
+            {conflict ? (
+              <div className="mx-5 mt-4 shrink-0 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+                <p className="text-[13px] font-medium">This card changed while you were editing.</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Your {conflict.kind} is preserved below. Reload to see theirs, or save yours on top.
+                </p>
+                <div className="mt-2 flex gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setConflict(null);
+                      setEditingTitle(false);
+                      setEditingDesc(false);
+                      setTitle("");
+                      setDescription("");
+                      setDueInput(null);
+                    }}
+                  >
+                    Reload latest
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const c = conflict;
+                      setConflict(null);
+                      if (c) saveText(c.kind, c.kind === "title" ? c.value || card.title : c.value || null, c.version);
+                    }}
+                  >
+                    Save mine anyway
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 pb-6">
             <section>
@@ -384,7 +443,7 @@ export function CardModal({ boardId, cardId, onClose }: { boardId: string; cardI
                   onDraft={setDueInput}
                   onSave={(next) => {
                     setDueInput(null);
-                    updateCard.mutate(next, { onError: (e) => setOpError(err(e)) });
+                    updateCard.mutate({ ...next, expectedVersion: card.version }, { onError: (e) => setOpError(err(e)) });
                   }}
                   onError={(e) => setOpError(err(e))}
                 />
@@ -435,7 +494,7 @@ export function CardModal({ boardId, cardId, onClose }: { boardId: string; cardI
                 {LABEL_COLORS.map((c) => (
                   <button
                     key={c}
-                    onClick={() => updateCard.mutate({ coverColor: card.coverColor === c ? null : c }, { onError: (e) => setOpError(err(e)) })}
+                    onClick={() => updateCard.mutate({ coverColor: card.coverColor === c ? null : c, expectedVersion: card.version }, { onError: (e) => setOpError(err(e)) })}
                     aria-label={`Cover color ${c}`}
                     title={c}
                     className={`size-6 rounded-md ${labelStyle(c).bar} ${card.coverColor === c ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : "opacity-70 hover:opacity-100"}`}
@@ -446,7 +505,7 @@ export function CardModal({ boardId, cardId, onClose }: { boardId: string; cardI
                     variant="ghost"
                     size="sm"
                     className="h-7 text-muted-foreground"
-                    onClick={() => updateCard.mutate({ coverColor: null, coverAttachmentId: null }, { onError: (e) => setOpError(err(e)) })}
+                    onClick={() => updateCard.mutate({ coverColor: null, coverAttachmentId: null, expectedVersion: card.version }, { onError: (e) => setOpError(err(e)) })}
                   >
                     Remove
                   </Button>
@@ -598,7 +657,7 @@ export function CardModal({ boardId, cardId, onClose }: { boardId: string; cardI
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => updateCard.mutate({ archived: !card.archivedAt }, { onError: (e) => setOpError(err(e)) })}
+                onClick={() => updateCard.mutate({ archived: !card.archivedAt, expectedVersion: card.version }, { onError: (e) => setOpError(err(e)) })}
               >
                 {card.archivedAt ? "Unarchive" : "Archive"}
               </Button>
@@ -624,7 +683,7 @@ export function CardModal({ boardId, cardId, onClose }: { boardId: string; cardI
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => updateCard.mutate({ isTemplate: !card.isTemplate }, { onError: (e) => setOpError(err(e)) })}
+                onClick={() => updateCard.mutate({ isTemplate: !card.isTemplate, expectedVersion: card.version }, { onError: (e) => setOpError(err(e)) })}
               >
                 <LayoutTemplate className="size-3.5" />
                 {card.isTemplate ? "Unmark template" : "Make template"}

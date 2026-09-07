@@ -6,6 +6,8 @@ import { HttpError, conflict } from "../src/common/errors";
 import { errorHandler } from "../src/common/middleware/error-handler";
 import { parseBody, userIdParam } from "../src/common/validation";
 import { hashInviteToken } from "../src/services/organizations/organizations.service";
+import { rankAppend, rankBetween } from "../src/common/lexorank";
+import { rankAppend as clientAppend, rankBetween as clientBetween } from "../../frontend/src/lib/rank";
 import { organizationsService } from "../src/services/organizations/organizations.service";
 import { boardsService } from "../src/services/boards/boards.service";
 import { listsService } from "../src/services/lists/lists.service";
@@ -26,6 +28,20 @@ function check(cond: unknown, msg: string): void {
   }
 }
 
+// Fresh versions for optimistic-concurrency writes (each write bumps).
+async function cardV(userId: string, cardId: string): Promise<number> {
+  return (await cardsService.getDetail(userId, cardId)).version;
+}
+async function boardV(userId: string, boardId: string): Promise<number> {
+  return (await boardsService.getDetail(userId, boardId, true)).version;
+}
+async function listRV(userId: string, boardId: string, listId: string): Promise<{ rank: string; version: number }> {
+  const tree = await boardsService.getDetail(userId, boardId, true);
+  const found = tree.lists.find((l) => l.id === listId);
+  if (!found) throw new Error("list missing in test");
+  return { rank: found.rank, version: found.version };
+}
+
 async function expectCode(fn: () => Promise<unknown>, code: string, msg: string): Promise<void> {
   try {
     await fn();
@@ -44,6 +60,7 @@ async function main(): Promise<void> {
   // Idempotent: purge leftovers from previously aborted runs first.
   await db.delete(organization).where(eq(organization.slug, "acme-hq"));
   await db.delete(organization).where(eq(organization.slug, "search-org"));
+  await db.delete(organization).where(eq(organization.slug, "relay-org"));
   for (const u of [A, B, C]) await db.delete(user).where(eq(user.id, u.id));
 
   for (const u of [A, B, C]) {
@@ -97,18 +114,18 @@ async function main(): Promise<void> {
   const board = await boardsService.create(A.id, org.id, "Roadmap");
   const l1 = await listsService.create(A.id, board.id, { title: "Todo" });
   const l2 = await listsService.create(A.id, board.id, { title: "Doing" });
-  check(l2.order > l1.order, "lists append with increasing order");
-  const l1moved = await listsService.reposition(A.id, l1.id, { beforeOrder: null, afterOrder: l2.order });
-  check(l1moved.order < l2.order, "list repositioned before l2");
+  check(l2.rank > l1.rank, "lists append with increasing order");
+  const l1moved = await listsService.reposition(A.id, l1.id, { beforeRank: null, afterRank: l2.rank, expectedVersion: l1.version });
+  check(l1moved.rank < l2.rank, "list repositioned before l2");
   const c1 = await cardsService.create(A.id, l1.id, { title: "First" });
   const c2 = await cardsService.create(A.id, l1.id, { title: "Second" });
   const c3 = await cardsService.create(A.id, l1.id, { title: "Third" });
-  check(c1.order < c2.order && c2.order < c3.order, "cards append in order");
+  check(c1.rank < c2.rank && c2.rank < c3.rank, "cards append in order");
   // Move c3 between c1 and c2 inside l1.
-  const hop = await cardsService.move(A.id, c3.id, { toListId: l1.id, beforeOrder: c1.order, afterOrder: c2.order });
-  check(hop.listId === l1.id && hop.order > c1.order && hop.order < c2.order, "card moved between c1 and c2");
+  const hop = await cardsService.move(A.id, c3.id, { toListId: l1.id, beforeRank: c1.rank, afterRank: c2.rank, expectedVersion: c3.version });
+  check(hop.listId === l1.id && hop.rank > c1.rank && hop.rank < c2.rank, "card moved between c1 and c2");
   // Cross-list move.
-  const hop2 = await cardsService.move(A.id, c3.id, { toListId: l2.id, beforeOrder: null, afterOrder: null });
+  const hop2 = await cardsService.move(A.id, c3.id, { toListId: l2.id, beforeRank: null, afterRank: null, expectedVersion: hop.version });
   check(hop2.listId === l2.id, "card moved across lists");
   const detail = await cardsService.getDetail(A.id, c3.id);
   const actions = detail.activities.map((a) => a.action);
@@ -120,6 +137,20 @@ async function main(): Promise<void> {
   );
   const tree = await boardsService.getDetail(A.id, board.id, false);
   check(tree.lists.length === 2, "board detail returns list tree");
+  // Optimistic concurrency: stale version → 409 with the fresh row.
+  const staleV = await cardV(A.id, c1.id);
+  await cardsService.update(A.id, c1.id, { title: "Bump", expectedVersion: staleV });
+  try {
+    await cardsService.update(A.id, c1.id, { title: "Stale write", expectedVersion: staleV });
+    check(false, "stale write rejected");
+  } catch (err) {
+    const current = (err as HttpError & { details?: { current?: { title?: string } } }).details?.current;
+    check(
+      err instanceof HttpError && err.code === "VERSION_CONFLICT" && current?.title === "Bump",
+      "stale write gets 409 + fresh row",
+    );
+  }
+  await cardsService.update(A.id, c1.id, { title: "First", expectedVersion: await cardV(A.id, c1.id) });
 
   console.log("assignees/comments:");
   const first = await cardsService.assign(A.id, c1.id, B.id);
@@ -159,14 +190,14 @@ async function main(): Promise<void> {
     "cross-board label attach rejected",
   );
   const due = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  const withDue = await cardsService.update(A.id, c1.id, { dueAt: due, dueComplete: false });
+  const withDue = await cardsService.update(A.id, c1.id, { dueAt: due, dueComplete: false, expectedVersion: await cardV(A.id, c1.id) });
   check(!!withDue.dueAt && withDue.dueComplete === false, "due date set");
   await cardsService.assign(A.id, c1.id, B.id);
   const rems = await meService.reminders(B.id, 7);
   check(rems.some((r) => r.id === c1.id), "assignee sees card in reminders");
   const remsNarrow = await meService.reminders(C.id, 7);
   check(!remsNarrow.some((r) => r.id === c1.id), "non-assignee has no reminder");
-  await cardsService.update(A.id, c1.id, { dueComplete: true });
+  await cardsService.update(A.id, c1.id, { dueComplete: true, expectedVersion: await cardV(A.id, c1.id) });
   const remsDone = await meService.reminders(B.id, 7);
   check(!remsDone.some((r) => r.id === c1.id), "completed cards leave reminders");
   const feed2 = await cardsService.listActivities(A.id, c1.id, { limit: 20 });
@@ -177,22 +208,22 @@ async function main(): Promise<void> {
   const det = await cardsService.detachLabel(A.id, c1.id, lab.id);
   check(det.detached, "label detached");
   await labelsService.remove(A.id, lab.id);
-  await boardsService.update(A.id, otherBoard.id, { archived: true });
+  await boardsService.update(A.id, otherBoard.id, { archived: true, expectedVersion: await boardV(A.id, otherBoard.id) });
   await boardsService.remove(B.id, otherBoard.id);
 
   console.log("rich cards:");
   const cl = await checklistsService.create(A.id, c1.id, { title: "QA" });
   const it1 = await checklistsService.addItem(A.id, cl.id, { text: "Step one", assigneeUserId: B.id });
   const it2 = await checklistsService.addItem(A.id, cl.id, { text: "Step two" });
-  check(!!it1.id && it2.order > it1.order, "checklist items append in order");
+  check(!!it1.id && it2.rank > it1.rank, "checklist items append in order");
   await expectCode(
     () => checklistsService.addItem(A.id, cl.id, { text: "X", assigneeUserId: C.id }),
     "NOT_ORG_MEMBER",
     "item assignee must be a member",
   );
   await checklistsService.updateItem(B.id, it1.id, { complete: true });
-  const moved2 = await checklistsService.repositionItem(A.id, it2.id, { beforeOrder: null, afterOrder: it1.order });
-  check(moved2.order < it1.order, "item repositioned first");
+  const moved2 = await checklistsService.repositionItem(A.id, it2.id, { beforeRank: null, afterRank: it1.rank });
+  check(moved2.rank < it1.rank, "item repositioned first");
   const fromItem = await checklistsService.convertItem(A.id, it2.id, {});
   check(fromItem.title === "Step two" && fromItem.listId === l1.id, "item converts to card in same list");
   // Attachments: upload, read back, cover, delete nulls cover.
@@ -210,11 +241,11 @@ async function main(): Promise<void> {
   const att2 = await attachmentsService.upload(A.id, c1.id, { originalname: "admin-del.png", mimetype: "image/png", buffer: png });
   await attachmentsService.remove(B.id, att2.id);
   check(true, "admin deletes any file");
-  await cardsService.update(A.id, c1.id, { coverColor: "blue", coverAttachmentId: att.id, storyPoints: 5, isTemplate: false });
+  await cardsService.update(A.id, c1.id, { coverColor: "blue", coverAttachmentId: att.id, storyPoints: 5, isTemplate: false, expectedVersion: await cardV(A.id, c1.id) });
   const covered = await cardsService.getDetail(A.id, c1.id);
   check(covered.coverColor === "blue" && covered.coverAttachmentId === att.id && covered.storyPoints === 5, "cover + points set");
   await expectCode(
-    () => cardsService.update(A.id, c1.id, { coverColor: "neon" }),
+    () => cardsService.update(A.id, c1.id, { coverColor: "neon", expectedVersion: 999999 }),
     "INVALID_COLOR",
     "cover palette validated",
   );
@@ -252,7 +283,7 @@ async function main(): Promise<void> {
   const withFields = await cardsService.getDetail(A.id, c1.id);
   check(withFields.customFieldValues.length === 4, "all custom values stored");
   // Copy deep-copies everything; templates flagged.
-  await cardsService.update(A.id, c1.id, { isTemplate: true });
+  await cardsService.update(A.id, c1.id, { isTemplate: true, expectedVersion: await cardV(A.id, c1.id) });
   const copy = await cardsService.copy(A.id, c1.id, {});
   check(copy.isTemplate === false && copy.title === `Copy of ${c1.title}`, "copy resets template flag");
   const copyDetail = await cardsService.getDetail(A.id, copy.id);
@@ -265,11 +296,11 @@ async function main(): Promise<void> {
     "copy carries assignees, labels, checklists, comments, fields",
   );
   check(copyDetail.activities.some((a) => a.action === "CARD_COPIED"), "copy logged");
-  await cardsService.update(A.id, c1.id, { isTemplate: false });
+  await cardsService.update(A.id, c1.id, { isTemplate: false, expectedVersion: await cardV(A.id, c1.id) });
 
   console.log("archive-first + membership:");
   await expectCode(() => boardsService.remove(B.id, board.id), "ARCHIVE_FIRST", "board hard delete needs archive");
-  await boardsService.update(A.id, board.id, { archived: true });
+  await boardsService.update(A.id, board.id, { archived: true, expectedVersion: await boardV(A.id, board.id) });
   await boardsService.remove(B.id, board.id);
   await expectCode(() => boardsService.getDetail(A.id, board.id, true), "NOT_FOUND", "deleted board is gone");
   // B (admin) removes A (member); A loses access.
@@ -277,6 +308,26 @@ async function main(): Promise<void> {
   await expectCode(() => organizationsService.getDetail(A.id, org.id), "NOT_FOUND", "removed member loses access");
 
   console.log("hardening:");
+  // Client/server rank implementations must agree exactly (optimistic UI).
+  {
+    let seed = 1234567;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const arr: string[] = [];
+    let mismatch = 0;
+    for (let n = 0; n < 300; n += 1) {
+      const pos = Math.floor(rnd() * (arr.length + 1));
+      const before = pos > 0 ? (arr[pos - 1] as string) : null;
+      const after = pos < arr.length ? (arr[pos] as string) : null;
+      const a = rankBetween(before, after);
+      const b = clientBetween(before, after);
+      if (a !== b) mismatch += 1;
+      if (before !== null && !(before < a)) mismatch += 1;
+      if (after !== null && !(a < after)) mismatch += 1;
+      arr.splice(pos, 0, a);
+    }
+    check(mismatch === 0, "client/server rank parity over 300 inserts");
+    check(clientAppend(null) === rankAppend(null), "rank seeds match");
+  }
   // Concurrent creators racing the same slug: exactly one wins, rest 409.
   const race = await Promise.allSettled(
     Array.from({ length: 5 }, (_, i) => organizationsService.create(A.id, { name: `Race ${i}`, slug: "race-slug" })),
@@ -335,6 +386,32 @@ async function main(): Promise<void> {
   const tasks = await meService.tasks(A.id);
   check(tasks.some((t) => t.id === scard.id && t.boardTitle === "Searchable Board"), "my tasks lists assignment with context");
   await db.delete(organization).where(eq(organization.id, sorg.id));
+
+  console.log("outbox + relay:");
+  const ro3 = await organizationsService.create(A.id, { name: "Relay Org", slug: "relay-org" });
+  const rb3 = await boardsService.create(A.id, ro3.id, "RB");
+  const rl3 = await listsService.create(A.id, rb3.id, { title: "L" });
+  const rc3 = await cardsService.create(A.id, rl3.id, { title: "Relay card" });
+  await cardsService.assign(A.id, rc3.id, A.id);
+  const inv3 = await organizationsService.invite(A.id, ro3.id, { email: B.email, role: "MEMBER" });
+  await organizationsService.acceptInvite(B.id, B.email, inv3.token);
+  await cardsService.addComment(B.id, rc3.id, "hello from B");
+  const { drainRelayOnce } = await import("../src/workers/relay");
+  await drainRelayOnce();
+  const { notification: notificationTable, auditLog: auditTable, outbox: outboxTable } = await import("../src/db/schema/trello");
+  const notifs = await db.select().from(notificationTable);
+  check(notifs.some((n) => n.userId === A.id && n.type === "COMMENTED"), "comment fanned out to assignee notification");
+  const audits = await db.select().from(auditTable).where(eq(auditTable.organizationId, ro3.id));
+  const auditActions = audits.map((a) => a.action);
+  check(auditActions.includes("ORG_CREATED") && auditActions.includes("MEMBER_ADDED") && auditActions.includes("INVITE_CREATED"), "admin actions audited");
+  const before = notifs.length;
+  await drainRelayOnce();
+  const after = (await db.select().from(notificationTable)).length;
+  check(before === after, "relay redelivery creates no duplicates");
+  const { isNull } = await import("drizzle-orm");
+  const pending = await db.select().from(outboxTable).where(isNull(outboxTable.processedAt));
+  check(pending.length === 0, "outbox fully drained");
+  await db.delete(organization).where(eq(organization.id, ro3.id));
 
   console.log("cleanup:");
   await db.delete(organization).where(eq(organization.id, org.id));

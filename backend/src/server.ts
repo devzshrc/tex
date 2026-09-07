@@ -2,6 +2,7 @@ import { createApp } from "./app";
 import { assertEnv, env } from "./config/env";
 import { closeDatabase, describeDatabase } from "./config/database";
 import { logger } from "./common/utils/logger";
+import { startRelay } from "./workers/relay";
 
 assertEnv();
 
@@ -17,6 +18,9 @@ if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
 /** Process entrypoint: bootstrap only — all wiring lives in `createApp()`. */
 function bootstrap(): void {
   const app = createApp();
+  const relayControl = new AbortController();
+  if (env.RELAY_ENABLED) startRelay(relayControl.signal);
+  else logger.warn("Outbox relay disabled (RELAY_ENABLED=false) — notifications/audit will queue undelivered.");
   const server = app.listen(env.PORT, () => {
     logger.info(`Backend listening on http://localhost:${env.PORT} (env=${env.NODE_ENV})`);
     logger.info(`Auth handler → ${env.BETTER_AUTH_URL}/api/auth/*`);
@@ -26,6 +30,7 @@ function bootstrap(): void {
 
   const shutdown = (signal: string) => {
     logger.info(`Received ${signal}, shutting down…`);
+    relayControl.abort();
     server.close(() => {
       void closeDatabase().finally(() => {
         logger.info("Shutdown complete.");

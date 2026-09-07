@@ -48,6 +48,7 @@ export interface Board {
   id: string;
   title: string;
   organizationId: string;
+  version: number;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -56,8 +57,9 @@ export interface Board {
 export interface TrelloList {
   id: string;
   title: string;
-  order: number;
+  rank: string;
   boardId: string;
+  version: number;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -67,8 +69,9 @@ export interface TrelloCard {
   id: string;
   title: string;
   description: string | null;
-  order: number;
+  rank: string;
   listId: string;
+  version: number;
   dueAt: string | null;
   dueComplete: boolean;
   coverColor: string | null;

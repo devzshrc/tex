@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { api } from "./api";
+import { toast } from "sonner";
+import { ApiError, api } from "./api";
 import type {
   Board,
   BoardDetail,
@@ -86,12 +87,22 @@ export function useCardDetail(cardId: string | null) {
 
 /* Mutations */
 
-function useInvalidate<TData, TVars>(fn: (vars: TVars) => Promise<TData>, keyFn: (vars: TVars, data: TData) => QueryKey[]) {
+function useInvalidate<TData, TVars>(fn: (vars: TVars) => Promise<TData>, keyFn: (vars: TVars, data?: TData) => QueryKey[]) {
   const qc = useQueryClient();
+  const invalidate = (vars: TVars, data?: TData) => {
+    for (const key of keyFn(vars, data)) qc.invalidateQueries({ queryKey: key });
+  };
   return useMutation({
     mutationFn: fn,
-    onSuccess: (data, vars) => {
-      for (const key of keyFn(vars, data)) qc.invalidateQueries({ queryKey: key });
+    onSuccess: (data, vars) => invalidate(vars, data),
+    // Global safety net: a version conflict means someone else changed the
+    // row first — refetch canonical state and say so. Text editors surface
+    // a keep-mine/use-latest dialog on top of this via the error code.
+    onError: (err, vars) => {
+      if (err instanceof ApiError && err.code === "VERSION_CONFLICT") {
+        invalidate(vars);
+        toast.info("Changed elsewhere — reloaded latest.");
+      }
     },
   });
 }
@@ -137,8 +148,8 @@ export function useCreateBoard(orgId: string) {
 
 export function useUpdateBoard(orgId: string) {
   return useInvalidate(
-    (v: { boardId: string; title?: string; archived?: boolean }) =>
-      api.patch<{ board: Board }>(`/boards/${v.boardId}`, { title: v.title, archived: v.archived }).then((r) => r.board),
+    (v: { boardId: string; title?: string; archived?: boolean; expectedVersion: number }) =>
+      api.patch<{ board: Board }>(`/boards/${v.boardId}`, v).then((r) => r.board),
     (v) => [...invalidateBoardTree(v.boardId), keys.orgBoards(orgId, false), keys.orgBoards(orgId, true)],
   );
 }
@@ -156,8 +167,8 @@ export function useCreateList(boardId: string) {
 
 export function useUpdateList(boardId: string) {
   return useInvalidate(
-    (v: { listId: string; title?: string; archived?: boolean; boardId?: string }) =>
-      api.patch<{ list: TrelloList }>(`/lists/${v.listId}`, { title: v.title, archived: v.archived, boardId: v.boardId }).then((r) => r.list),
+    (v: { listId: string; title?: string; archived?: boolean; boardId?: string; expectedVersion: number }) =>
+      api.patch<{ list: TrelloList }>(`/lists/${v.listId}`, v).then((r) => r.list),
     (v) => [...invalidateBoardTree(boardId), ...(v.boardId && v.boardId !== boardId ? invalidateBoardTree(v.boardId) : [])],
   );
 }
@@ -176,7 +187,7 @@ export function useCreateCard(boardId: string) {
 
 export function useUpdateCard(boardId: string, cardId: string) {
   return useInvalidate(
-    (v: { title?: string; description?: string | null; archived?: boolean; dueAt?: string | null; dueComplete?: boolean; coverColor?: string | null; coverAttachmentId?: string | null; storyPoints?: number | null; isTemplate?: boolean }) =>
+    (v: { title?: string; description?: string | null; archived?: boolean; dueAt?: string | null; dueComplete?: boolean; coverColor?: string | null; coverAttachmentId?: string | null; storyPoints?: number | null; isTemplate?: boolean; expectedVersion: number }) =>
       api.patch<{ card: TrelloCard }>(`/cards/${cardId}`, v).then((r) => r.card),
     () => [...invalidateBoardTree(boardId), keys.card(cardId)],
   );
@@ -224,6 +235,7 @@ export interface MyTask {
   boardTitle: string;
   organizationId: string;
   organizationName: string;
+  version: number;
   updatedAt: string;
 }
 

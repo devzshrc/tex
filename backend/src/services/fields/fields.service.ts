@@ -2,7 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "../../config/database";
 import { customFieldDef } from "../../db/schema/trello";
 import { badRequest, notFound } from "../../common/errors";
-import { keyAfterLast } from "../../common/order";
+import { rankAppend } from "../../common/lexorank";
 import { loadBoardContext, loadFieldContext } from "../organizations/org-access";
 import type { CustomFieldType } from "../../db/schema/trello";
 
@@ -16,14 +16,14 @@ function assertOptions(type: CustomFieldType, options: string[] | undefined): st
   return cleaned;
 }
 
-async function maxFieldOrder(boardId: string): Promise<number | null> {
+async function maxFieldRank(boardId: string): Promise<string | null> {
   const [row] = await db
-    .select({ order: customFieldDef.order })
+    .select({ rank: customFieldDef.rank })
     .from(customFieldDef)
     .where(eq(customFieldDef.boardId, boardId))
-    .orderBy(desc(customFieldDef.order))
+    .orderBy(desc(customFieldDef.rank))
     .limit(1);
-  return row?.order ?? null;
+  return row?.rank ?? null;
 }
 
 export const fieldsService = {
@@ -39,7 +39,7 @@ export const fieldsService = {
         name: input.name.trim(),
         type: input.type,
         options: assertOptions(input.type, input.options),
-        order: keyAfterLast(await maxFieldOrder(boardId)),
+        rank: rankAppend(await maxFieldRank(boardId)),
         boardId,
       })
       .returning();
