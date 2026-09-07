@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+
+# builds & output
+dist/
+out/
+*.tgz
+build/
+
+# env & secrets — never commit these (see .env.example files)
+.env
+.env.*
+!.env.example
+
+# local runtime data
+uploads/
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite*
+
+# logs & coverage
+logs/
+*.log
+coverage/
+*.lcov
+
+# caches & build info
+.eslintcache
+.cache
+*.tsbuildinfo
+dist-ssr/
+
+# editors & OS
+.idea/
+.vscode/
+.cursor/
+.DS_Store
+Thumbs.db
