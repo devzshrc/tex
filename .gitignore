@@ -27,6 +27,7 @@ coverage/
 *.lcov
 
 # caches & build info
+.turbo/
 .eslintcache
 .cache
 *.tsbuildinfo

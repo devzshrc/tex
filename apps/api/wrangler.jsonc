@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tex-api",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "NODE_ENV": "production",
+    "BETTER_AUTH_URL": "https://api.example.com",
+    "FRONTEND_URL": "https://app.example.com",
+    "RELAY_ENABLED": "true"
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "replace-with-hyperdrive-id"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ATTACHMENTS",
+      "bucket_name": "tex-attachments"
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
+}

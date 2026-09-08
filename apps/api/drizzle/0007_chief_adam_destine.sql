@@ -1,0 +1,1 @@
+CREATE INDEX "outbox_board_created_idx" ON "outbox" USING btree ("board_id","created_at","id");
