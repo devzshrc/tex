@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText } from "@/components/ui/icons";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 

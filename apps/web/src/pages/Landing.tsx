@@ -1,25 +1,23 @@
-import { ArrowRight, CalendarDays, ListChecks, SlidersHorizontal, SquareKanban } from "lucide-react";
+import { ArrowRight, CalendarDays, ListChecks, SlidersHorizontal, SquareKanban } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ModeToggle } from "@/components/theme/ModeToggle";
 import { Eyebrow } from "@/components/shared/primitives";
 import { Logo } from "@/components/shared/Logo";
-import { navigate } from "@/lib/router";
+import { Link, navigate } from "@/lib/router";
 
 function SiteNav() {
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-3xl items-center gap-6 px-4 md:px-6">
-        <button onClick={() => navigate("/")} aria-label="tex home">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-6 px-4 md:px-8">
+        <Link to="/" aria-label="tex home">
           <Logo />
-        </button>
+        </Link>
         <nav className="hidden items-center gap-5 text-[13px] text-muted-foreground sm:flex">
           <a href="#features" className="transition-colors hover:text-foreground">Features</a>
-          <a href="#how" className="transition-colors hover:text-foreground">How it works</a>
+          <a href="#how" className="transition-colors hover:text-foreground">How It Works</a>
           <a href="#faq" className="transition-colors hover:text-foreground">FAQ</a>
         </nav>
         <div className="ml-auto flex items-center gap-1.5">
-          <ModeToggle />
           <Button variant="ghost" size="sm" onClick={() => navigate("/signin")}>
             Sign in
           </Button>
@@ -49,7 +47,7 @@ function MockCard({ bars, title, meta }: { bars: string[]; title: string; meta: 
 function BoardMock() {
   return (
     <figure className="mx-auto w-full max-w-3xl">
-      <div className="grid gap-3 rounded-xl border border-border bg-muted/40 p-3 shadow-lg sm:grid-cols-3">
+      <div className="grid gap-3 rounded-2xl border border-border bg-card/70 p-3 shadow-2xl shadow-black/30 backdrop-blur-sm sm:grid-cols-3">
         <div className="flex flex-col gap-2">
           <p className="px-1 text-[11px] font-semibold tracking-wide">Backlog <span className="font-normal text-muted-foreground">2</span></p>
           <MockCard bars={["bg-red-500"]} title="Fix login redirect loop" meta="P0 · due fri" />
@@ -74,26 +72,28 @@ function BoardMock() {
 
 function Hero() {
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 pt-20 pb-16 text-center md:px-6 md:pt-28">
-      <Eyebrow className="text-center">kanban without the bloat</Eyebrow>
-      <h1 className="mx-auto mt-4 max-w-2xl text-4xl leading-[1.05] font-semibold tracking-tight text-balance md:text-6xl">
-        Every card. Every move. Nothing lost.
-      </h1>
-      <p className="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-muted-foreground">
-        tex is a fast, focused board for teams that live in cards — drag-and-drop lists, labels, due dates,
-        checklists, files, and custom fields. Nothing you didn't ask for.
-      </p>
-      <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
-        <Button size="lg" onClick={() => navigate("/o")}>
-          Open the app
-          <ArrowRight className="size-4" />
-        </Button>
-        <Button size="lg" variant="outline" onClick={() => document.getElementById("how")?.scrollIntoView({ behavior: "smooth" })}>
-          How it works
-        </Button>
+    <section className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pt-16 pb-20 md:px-8 md:pt-24 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+      <div className="relative z-10">
+        <Eyebrow>kanban without the bloat</Eyebrow>
+        <h1 className="mt-5 max-w-2xl text-5xl leading-[0.92] font-semibold tracking-[-0.065em] md:text-7xl">
+          Move work<br />with intent.
+        </h1>
+        <p className="mt-7 max-w-lg text-[15px] leading-relaxed text-muted-foreground md:text-base">
+          tex is the collaborative board for teams who want signal over ceremony: fast cards, clear ownership, and a complete record of every decision.
+        </p>
+        <div className="mt-8 flex flex-wrap items-center gap-2.5">
+          <Button size="lg" onClick={() => navigate("/o")}>
+            Open Workspace
+            <ArrowRight className="size-4" />
+          </Button>
+          <Button size="lg" variant="outline" onClick={() => document.getElementById("how")?.scrollIntoView({ behavior: "smooth" })}>
+            See the Flow
+          </Button>
+        </div>
+        <p className="mt-6 font-mono text-[10px] tracking-[0.12em] text-muted-foreground uppercase">Google sign-in · No credit card · Your data, your Postgres</p>
       </div>
-      <p className="mt-5 font-mono text-xs text-muted-foreground">Free · One-click Google sign-in · No credit card.</p>
-      <div className="mt-12">
+      <div className="relative lg:pt-12">
+        <span className="absolute -top-6 right-8 font-mono text-[10px] tracking-[0.2em] text-primary uppercase">live board / 01</span>
         <BoardMock />
       </div>
     </section>
@@ -116,11 +116,11 @@ const INCLUDED = [
 function Included() {
   return (
     <section className="border-y border-border bg-muted/30">
-      <div className="mx-auto w-full max-w-3xl px-4 py-10 text-center md:px-6">
+      <div className="mx-auto w-full max-w-6xl px-4 py-10 text-center md:px-8">
         <Eyebrow className="text-center">everything included</Eyebrow>
         <div className="mt-5 flex flex-wrap justify-center gap-2">
           {INCLUDED.map((item) => (
-            <span key={item} className="rounded-full border border-border bg-card px-3 py-1 font-mono text-xs text-muted-foreground">
+            <span key={item} className="rounded-full border border-border bg-card/70 px-3 py-1 font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
               {item}
             </span>
           ))}
@@ -156,17 +156,17 @@ const FEATURES = [
 function Features() {
   return (
     <section id="features" className="scroll-mt-14">
-      <div className="mx-auto w-full max-w-3xl px-4 py-20 text-center md:px-6">
+      <div className="mx-auto w-full max-w-6xl px-4 py-24 text-center md:px-8">
         <Eyebrow className="text-center">what you get</Eyebrow>
         <h2 className="mx-auto mt-3 max-w-md text-2xl font-semibold tracking-tight text-balance md:text-3xl">
           Boards that stay out of your way.
         </h2>
-        <div className="mt-10 grid gap-3 text-left sm:grid-cols-2">
+        <div className="mt-10 grid gap-3 text-left sm:grid-cols-2 lg:grid-cols-4">
           {FEATURES.map((f) => (
-            <Card key={f.title} className="shadow-none transition-colors hover:border-ring">
+            <Card key={f.title} className="gap-0 border-border bg-card/70 py-0 transition-[border-color,background-color,transform] hover:-translate-y-1 hover:border-primary/60 hover:bg-card">
               <CardContent className="p-5">
-                <span className="flex size-9 items-center justify-center rounded-md bg-muted">
-                  <f.icon className="size-4 text-foreground" />
+                <span className="flex size-10 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+                  <f.icon className="size-4" />
                 </span>
                 <p className="mt-3 text-[15px] font-semibold tracking-tight">{f.title}</p>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{f.body}</p>
@@ -188,14 +188,14 @@ const STEPS = [
 function How() {
   return (
     <section id="how" className="scroll-mt-14 border-y border-border bg-muted/30">
-      <div className="mx-auto w-full max-w-3xl px-4 py-20 text-center md:px-6">
+      <div className="mx-auto w-full max-w-6xl px-4 py-24 text-center md:px-8">
         <Eyebrow className="text-center">honestly, it's three steps</Eyebrow>
         <h2 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">Set it once. Then just work.</h2>
         <div className="mt-10 grid gap-3 text-left sm:grid-cols-3">
           {STEPS.map((s) => (
-            <Card key={s.n} className="shadow-none">
+            <Card key={s.n} className="gap-0 border-border bg-card/65 py-0">
               <CardContent className="p-5">
-                <p className="font-mono text-xs font-semibold text-primary">{s.n}</p>
+                <p className="font-mono text-[10px] font-semibold tracking-[0.18em] text-primary">{s.n}</p>
                 <p className="mt-2 text-[15px] font-semibold tracking-tight">{s.title}</p>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{s.body}</p>
               </CardContent>
@@ -279,8 +279,9 @@ function Footer() {
 export function Landing() {
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <a href="#main-content" className="skip-link">Skip to content</a>
       <SiteNav />
-      <main>
+      <main id="main-content">
         <Hero />
         <Included />
         <Features />

@@ -1,4 +1,4 @@
-import { CalendarDays } from "lucide-react";
+import { CalendarDays } from "@/components/ui/icons";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { dueLabel } from "@/lib/due";
@@ -48,7 +48,7 @@ function Group({ title, tasks }: { title: string; tasks: MyTask[] }) {
       <p className="mb-2 text-[11px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
         {title} · {tasks.length}
       </p>
-      <div className="flex flex-col rounded-lg border border-border">
+      <div className="editorial-panel flex flex-col rounded-2xl">
         {tasks.map((t, i) => (
           <div key={t.id}>
             {i > 0 ? <div className="h-px bg-border" /> : null}
@@ -72,7 +72,7 @@ export function MyTasks() {
 
   return (
     <AppShell>
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 p-4 md:p-6">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 p-4 md:p-8">
         <PageHeader eyebrow="personal" title="My Tasks" hint="Every card assigned to you, across workspaces." />
         {isPending ? (
           <div className="flex flex-col gap-2">

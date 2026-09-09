@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRightToLine, Plus, X } from "lucide-react";
+import { ArrowRightToLine, Plus, X } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";

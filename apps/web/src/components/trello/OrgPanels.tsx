@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Check, Copy, MailPlus } from "lucide-react";
+import { Check, Copy, MailPlus, SlidersHorizontal } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -270,5 +270,32 @@ export function DangerZone({ org }: { org: OrgDetail }) {
         {error && !confirmOpen ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
     </section>
+  );
+}
+
+/** Secondary workspace administration, kept out of the board-selection flow. */
+export function WorkspaceSettingsDialog({ org, isAdmin }: { org: OrgDetail; isAdmin: boolean }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <SlidersHorizontal className="size-4" />
+          {isAdmin ? "Manage Workspace" : "Members"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{isAdmin ? "Manage Workspace" : "Workspace Members"}</DialogTitle>
+          <DialogDescription>
+            {isAdmin ? "Members, invitations, and workspace settings." : "See who has access to this workspace."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-7 py-1">
+          <MembersPanel orgId={org.id} isAdmin={isAdmin} />
+          {isAdmin ? <InvitesPanel orgId={org.id} /> : null}
+          {isAdmin ? <DangerZone org={org} /> : null}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

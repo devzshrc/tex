@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, Plus, X } from "lucide-react";
+import { ChevronLeft, Plus, X } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { useCreateBoard, useDeleteBoard, useOrg, useOrgBoards, useUpdateBoard } from "@/lib/trello-queries";
-import { DangerZone, InvitesPanel, MembersPanel } from "../components/trello/OrgPanels";
+import { WorkspaceSettingsDialog } from "../components/trello/OrgPanels";
 import { ConfirmButton } from "../components/shared/ConfirmButton";
 import { EmptyState, NotFoundCard } from "../components/shared/primitives";
 import { AppShell } from "../components/trello/AppShell";
@@ -75,17 +75,18 @@ export function OrgBoards({ orgId }: { orgId: string }) {
 
   return (
     <AppShell>
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 p-4 md:p-6">
-        <div className="flex min-w-0 items-center gap-2">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 p-4 md:p-8">
+        <div className="flex min-w-0 items-center gap-3 border-b border-border pb-5">
           <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label="Back to workspaces" onClick={() => navigate("/o")}>
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="truncate text-sm font-semibold tracking-tight">{org.name}</span>
+          <span className="min-w-0 flex-1 truncate text-3xl font-semibold tracking-[-0.045em]">{org.name}</span>
           <Badge variant={isAdmin ? "default" : "secondary"}>{org.myRole.toLowerCase()}</Badge>
+          <WorkspaceSettingsDialog org={org} isAdmin={!!isAdmin} />
         </div>
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-[11px] font-medium tracking-[0.18em] text-muted-foreground uppercase">boards</p>
+            <p className="section-kicker">boards</p>
             <div className="flex items-center gap-1.5">
               <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setShowArchived((v) => !v)}>
                 {showArchived ? "Hide archived" : "Show archived"}
@@ -123,14 +124,15 @@ export function OrgBoards({ orgId }: { orgId: string }) {
           </div>
 
           {boards.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {boards.map((board) => (
                 <div key={board.id} className="group relative">
                   <button onClick={() => navigate(`/b/${board.id}`)} className="w-full text-left">
-                    <Card className="shadow-none transition-colors hover:border-ring">
-                      <CardContent className="p-4">
-                        <p className="truncate text-sm font-medium">{board.title}</p>
-                        <p className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <Card className="gap-0 border-border bg-card/80 py-0 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/60 hover:bg-card">
+                      <CardContent className="p-5">
+                        <span className="mb-8 block h-px w-10 bg-primary/80" />
+                        <p className="truncate text-lg font-semibold tracking-[-0.03em]">{board.title}</p>
+                        <p className="mt-2 flex items-center gap-2 font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
                           updated {new Date(board.updatedAt).toLocaleDateString()}
                           {board.archivedAt ? <Badge variant="outline">archived</Badge> : null}
                         </p>
@@ -175,13 +177,6 @@ export function OrgBoards({ orgId }: { orgId: string }) {
           {opError ? <p className="mt-1.5 text-xs text-destructive">{opError}</p> : null}
         </section>
 
-        <MembersPanel orgId={orgId} isAdmin={!!isAdmin} />
-        {isAdmin ? (
-          <>
-            <InvitesPanel orgId={orgId} />
-            <DangerZone org={org} />
-          </>
-        ) : null}
       </main>
     </AppShell>
   );

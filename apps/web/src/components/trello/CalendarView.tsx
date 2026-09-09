@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { labelStyle } from "@/lib/labels";
 import { cn } from "@/lib/utils";
@@ -68,9 +68,9 @@ export function CalendarView({ board, onOpenCard }: { board: BoardDetail; onOpen
   const today = new Date();
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex items-center gap-1 border-b border-border px-3 py-2">
-        <p className="text-sm font-semibold tracking-tight">
+    <div className="editorial-panel overflow-hidden">
+      <div className="flex items-center gap-1 border-b border-border bg-card/55 px-4 py-3">
+        <p className="text-lg font-semibold tracking-[-0.035em]">
           {month.toLocaleString(undefined, { month: "long", year: "numeric" })}
         </p>
         <span className="ml-2 text-[11px] text-muted-foreground tabular-nums">{dated.length} dated</span>
@@ -99,7 +99,7 @@ export function CalendarView({ board, onOpenCard }: { board: BoardDetail; onOpen
           return (
             <div
               key={`${date.getTime()}-${i}`}
-              className={cn("min-h-20 border-b border-border p-1.5 [&:nth-last-child(-n+7)]:border-b-0", outside && "bg-muted/30")}
+              className={cn("min-h-22 border-b border-border p-1.5 [&:nth-last-child(-n+7)]:border-b-0", outside && "bg-muted/20")}
             >
               <p className={cn(
                 "inline-flex size-6 items-center justify-center rounded-full text-[11px] tabular-nums",
@@ -116,7 +116,7 @@ export function CalendarView({ board, onOpenCard }: { board: BoardDetail; onOpen
                       key={c.id}
                       onClick={() => onOpenCard(c.id)}
                       title={`${c.title} · ${c.listTitle}`}
-                      className="flex items-center gap-1.5 rounded border border-border bg-background px-1.5 py-1 text-left hover:border-ring"
+                       className="flex items-center gap-1.5 rounded-lg border border-border bg-background/60 px-1.5 py-1 text-left transition-colors hover:border-primary/60 hover:bg-card"
                     >
                       <span className={cn("size-2 shrink-0 rounded-full", dot)} />
                       <span className={cn("min-w-0 flex-1 truncate text-[11px] font-medium", overdue && "text-red-700 dark:text-red-300")}>

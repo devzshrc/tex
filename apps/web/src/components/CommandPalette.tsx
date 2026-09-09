@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Command } from "cmdk";
-import { ArrowRight, CheckSquare, House, Keyboard, LogOut, Moon, Search, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
+import { ArrowRight, CheckSquare, House, Keyboard, LogOut, Search } from "@/components/ui/icons";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { authClient, useSession } from "@/lib/auth-client";
@@ -22,7 +21,6 @@ export function CommandPalette() {
   const open = useUiStore((s) => s.paletteOpen);
   const setOpen = useUiStore((s) => s.setPaletteOpen);
   const setShortcutsOpen = useUiStore((s) => s.setShortcutsOpen);
-  const { setTheme, resolvedTheme } = useTheme();
   const [query, setQuery] = useState("");
   const debounced = useDebounced(query, 200);
   const { data: results, isFetching } = useSearch(debounced);
@@ -42,16 +40,16 @@ export function CommandPalette() {
       open={open}
       onOpenChange={setOpen}
       label="Command palette"
-      className="fixed top-[18%] left-1/2 z-50 w-full max-w-lg -translate-x-1/2 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg"
+      className="fixed top-[18%] left-1/2 z-50 w-full max-w-lg -translate-x-1/2 overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl shadow-black/60"
       overlayClassName="fixed inset-0 z-50 bg-black/50"
     >
-      <div className="flex items-center gap-2 border-b border-border px-3">
+      <div className="flex items-center gap-2 border-b border-border bg-card/45 px-4">
         <Search className="size-4 shrink-0 text-muted-foreground" />
         <Command.Input
           value={query}
           onValueChange={setQuery}
           placeholder="Search boards, cards…  (commands when empty)"
-          className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0"
         />
         {isFetching ? <span className="font-mono text-[10px] text-muted-foreground">…</span> : null}
       </div>
@@ -64,14 +62,6 @@ export function CommandPalette() {
           <Command.Group heading="Go to" className="px-2 py-1.5 font-mono text-[11px] text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5">
             <PaletteItem icon={<House />} label="Home" hint="workspaces" onSelect={() => go("/o")} />
             <PaletteItem icon={<CheckSquare />} label="My Tasks" hint="assigned to you" onSelect={() => go("/tasks")} />
-            <PaletteItem
-              icon={resolvedTheme === "dark" ? <Sun /> : <Moon />}
-              label={`Theme: switch to ${resolvedTheme === "dark" ? "light" : "dark"}`}
-              onSelect={() => {
-                setTheme(resolvedTheme === "dark" ? "light" : "dark");
-                setOpen(false);
-              }}
-            />
             <PaletteItem icon={<Keyboard />} label="Keyboard shortcuts" hint="?" onSelect={() => { setOpen(false); setShortcutsOpen(true); }} />
             <PaletteItem
               icon={<LogOut />}
@@ -114,7 +104,7 @@ export function CommandPalette() {
           </Command.Group>
         )}
       </Command.List>
-      <div className="flex items-center gap-3 border-t border-border px-3 py-2 font-mono text-[10px] text-muted-foreground">
+      <div className="flex items-center gap-3 border-t border-border bg-card/35 px-4 py-2 font-mono text-[10px] text-muted-foreground">
         <span>↑↓ navigate</span>
         <span>↵ open</span>
         <span className="ml-auto">esc close</span>

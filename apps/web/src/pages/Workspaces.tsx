@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,7 +37,7 @@ export function Workspaces() {
 
   return (
     <AppShell>
-      <main className="mx-auto w-full max-w-4xl flex-1 p-4 md:p-6">
+      <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-8">
         <PageHeader
           eyebrow="workspaces"
           title="Your organizations"
@@ -81,17 +81,17 @@ export function Workspaces() {
             <Skeleton className="h-24" />
           </div>
         ) : orgs && orgs.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {orgs.map((org) => (
-              <button key={org.id} onClick={() => navigate(`/o/${org.id}`)} className="text-left">
-                <Card className="shadow-none transition-colors hover:border-ring">
-                  <CardContent className="flex items-center gap-3 p-4">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-semibold">
+              <button key={org.id} onClick={() => navigate(`/o/${org.id}`)} className="group text-left">
+                <Card className="h-full gap-0 border-border bg-card/80 py-0 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/60 hover:bg-card">
+                  <CardContent className="flex items-center gap-4 p-5">
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-base font-semibold text-primary-foreground shadow-[0_12px_28px_-16px_var(--primary)]">
                       {org.name.charAt(0).toUpperCase()}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{org.name}</span>
-                      <span className="block truncate font-mono text-[11px] text-muted-foreground">/{org.slug}</span>
+                      <span className="block truncate text-lg font-semibold tracking-[-0.03em]">{org.name}</span>
+                      <span className="mt-0.5 block truncate font-mono text-[10px] tracking-wider text-muted-foreground uppercase">/{org.slug}</span>
                     </span>
                     <Badge variant={org.role === "ADMIN" ? "default" : "secondary"}>{org.role.toLowerCase()}</Badge>
                   </CardContent>
@@ -111,7 +111,7 @@ export function Workspaces() {
             <p className="mb-2 text-[11px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
               due soon · assigned to you
             </p>
-            <div className="flex flex-col rounded-lg border border-border">
+            <div className="editorial-panel flex flex-col rounded-2xl">
               {reminders.slice(0, 8).map((r, i) => {
                 const overdue = new Date(r.dueAt).getTime() < Date.now();
                 return (

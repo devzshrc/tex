@@ -1,4 +1,4 @@
-import { AlignLeft, Check, Clock, ListChecks, ThumbsUp } from "lucide-react";
+import { AlignLeft, Check, Clock, ListChecks, ThumbsUp } from "@/components/ui/icons";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Badge } from "@/components/ui/badge";
@@ -30,8 +30,8 @@ export function CardRow({ card, onOpen, overlay }: { card: BoardCard; onOpen: ()
     <button
       onClick={onOpen}
       className={cn(
-        "w-full overflow-hidden rounded-md border border-border bg-card text-left shadow-xs transition-colors hover:border-ring",
-        overlay && "rotate-2 shadow-lg",
+        "w-full overflow-hidden rounded-lg border border-border bg-background/65 text-left shadow-[0_12px_22px_-20px_rgb(0_0_0_/_0.9)] transition-[background-color,border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-ring hover:bg-card",
+        overlay && "rotate-2 shadow-xl",
       )}
     >
       {card.coverAttachmentId ? (

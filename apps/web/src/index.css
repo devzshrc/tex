@@ -1,4 +1,4 @@
-@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/bricolage-grotesque";
 @import "../styles/globals.css";
 
 @layer base {
@@ -7,7 +7,10 @@
   }
 
   body {
-    @apply min-h-screen bg-background text-foreground antialiased;
+    @apply min-h-screen overflow-x-hidden bg-background text-foreground antialiased;
+    background-image: radial-gradient(circle at 78% -20%, oklch(0.36 0.08 235 / 20%), transparent 36%), radial-gradient(circle at 0% 100%, oklch(0.25 0.04 220 / 16%), transparent 42%), linear-gradient(oklch(1 0 0 / 0.025) 1px, transparent 1px), linear-gradient(90deg, oklch(1 0 0 / 0.025) 1px, transparent 1px);
+    background-size: auto, auto, 28px 28px, 28px 28px;
+    background-attachment: fixed;
   }
 
   ::selection {
@@ -24,12 +27,24 @@
     height: 8px;
   }
   *::-webkit-scrollbar-thumb {
-    background: var(--border);
+    background: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
     border-radius: 8px;
   }
   *::-webkit-scrollbar-track {
     background: transparent;
   }
+}
+
+@utility editorial-panel {
+  @apply relative overflow-hidden rounded-2xl border border-border bg-card/85 shadow-[0_24px_70px_-52px_rgb(0_0_0_/_1)] backdrop-blur-sm;
+}
+
+@utility section-kicker {
+  @apply text-[10px] font-semibold tracking-[0.22em] text-primary uppercase;
+}
+
+@utility skip-link {
+  @apply fixed top-3 left-3 z-[100] -translate-y-16 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-lg transition-transform focus-visible:translate-y-0;
 }
 
 @utility bg-dots {

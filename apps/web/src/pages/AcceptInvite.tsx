@@ -26,8 +26,8 @@ export function AcceptInvite({ token }: { token: string }) {
   }, [accept.isSuccess, accept.data]);
 
   return (
-    <div className="grid min-h-screen place-items-center p-6">
-      <Card className="w-full max-w-sm shadow-none">
+    <main className="grid min-h-screen place-items-center p-6">
+      <Card className="w-full max-w-sm border-border bg-card/90">
         <CardContent className="px-6 py-12 text-center">
           {isPending || (started && accept.isPending) ? (
             <>
@@ -38,17 +38,19 @@ export function AcceptInvite({ token }: { token: string }) {
             </>
           ) : !session?.user ? (
             <>
-              <p className="text-sm font-medium">Sign in to accept</p>
+              <p className="section-kicker">workspace invite</p>
+              <p className="mt-2 text-2xl font-semibold tracking-[-0.04em]">Sign In to Accept</p>
               <p className="mx-auto mt-1 max-w-xs text-[13px] text-muted-foreground">
                 This invite link works once you're signed in — come back to it after.
               </p>
               <Button size="sm" className="mt-4" onClick={() => navigate("/")}>
-                Go to sign in
+                Go to Sign In
               </Button>
             </>
           ) : accept.isError ? (
             <>
-              <p className="text-sm font-medium">Invite invalid</p>
+              <p className="section-kicker">workspace invite</p>
+              <p className="mt-2 text-2xl font-semibold tracking-[-0.04em]">Invite Unavailable</p>
               <p className="mx-auto mt-1 max-w-xs text-[13px] text-muted-foreground">
                 {accept.error instanceof ApiError ? accept.error.message : "This invite is invalid or expired."}
               </p>
@@ -58,12 +60,13 @@ export function AcceptInvite({ token }: { token: string }) {
             </>
           ) : (
             <>
-              <p className="text-sm font-medium">Joined!</p>
+              <p className="section-kicker">workspace invite</p>
+              <p className="mt-2 text-2xl font-semibold tracking-[-0.04em]">You’re In</p>
               <p className="mt-1 text-[13px] text-muted-foreground">Taking you to the workspace…</p>
             </>
           )}
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }

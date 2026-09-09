@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Download, ImagePlus, Paperclip, X } from "lucide-react";
+import { Download, ImagePlus, Paperclip, X } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import {

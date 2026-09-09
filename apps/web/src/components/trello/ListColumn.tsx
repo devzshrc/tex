@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MoreHorizontal, Plus, X } from "lucide-react";
+import { MoreHorizontal, Plus, X } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -90,12 +90,12 @@ export function ListColumn({
     <div
       ref={sortable.setNodeRef}
       style={{ transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition }}
-      className={cn("flex w-72 shrink-0 flex-col rounded-lg border border-border bg-muted/40", sortable.isDragging && "opacity-40")}
+      className={cn("flex w-72 shrink-0 flex-col rounded-2xl border border-border bg-card/72 shadow-[0_24px_48px_-38px_rgb(0_0_0_/_1)] backdrop-blur-sm", sortable.isDragging && "opacity-40")}
     >
       <div
         {...sortable.attributes}
         {...sortable.listeners}
-        className="flex cursor-grab items-center gap-1.5 px-3 pt-2.5 pb-1.5 active:cursor-grabbing"
+        className="flex cursor-grab items-center gap-1.5 px-3 pt-3 pb-1.5 active:cursor-grabbing"
       >
         {renaming ? (
           <Input

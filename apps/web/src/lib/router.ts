@@ -1,4 +1,5 @@
-import { useSyncExternalStore } from "react";
+import type { AnchorHTMLAttributes, MouseEvent } from "react";
+import { createElement, useSyncExternalStore } from "react";
 
 export interface Location {
   pathname: string;
@@ -52,6 +53,20 @@ export function navigate(path: string): void {
   if (`${window.location.pathname}${window.location.search}` === target) return;
   window.history.pushState(null, "", target);
   notify();
+}
+
+/** Native-link semantics with SPA navigation for unmodified primary clicks. */
+export function Link({ to, onClick, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }) {
+  return createElement("a", {
+    ...props,
+    href: to,
+    onClick: (event: MouseEvent<HTMLAnchorElement>) => {
+      onClick?.(event);
+      if (event.defaultPrevented || props.target || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      navigate(to);
+    },
+  });
 }
 
 export function useSearchParam(name: string): string | null {

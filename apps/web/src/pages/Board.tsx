@@ -1,26 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, ChevronLeft, Pencil, Search, SquareKanban, Star, X } from "lucide-react";
+import { Calendar, ChevronLeft, MoreHorizontal, Pencil, Search, SquareKanban, Star, X } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ApiError } from "@/lib/api";
 import { EMPTY_FILTERS, filterBoard, isFiltering, type CardFilters } from "@/lib/card-filter";
 import { labelStyle } from "@/lib/labels";
 import { useBoardRealtime } from "@/lib/realtime";
 import { navigate, useSearchParam } from "@/lib/router";
 import { pushRecentBoard, useConnectionStore, useFavoritesStore } from "@/lib/store";
-import { useBoardDetail, useDeleteBoard, useMembers, useUpdateBoard } from "@/lib/trello-queries";
+import { useBoardDetail, useMembers, useUpdateBoard } from "@/lib/trello-queries";
 import { BoardView } from "../components/trello/BoardView";
 import { CalendarView } from "../components/trello/CalendarView";
 import { CardModal } from "../components/trello/CardModal";
 import { ManageCustomFields } from "../components/trello/ManageCustomFields";
 import { ManageLabels } from "../components/trello/ManageLabels";
-import { ConfirmButton } from "../components/shared/ConfirmButton";
 import { NotFoundCard } from "../components/shared/primitives";
 import { AppShell } from "../components/trello/AppShell";
-import { UserCluster } from "../components/trello/TopBar";
 import { cn } from "@/lib/utils";
 
 function LiveDot({ boardId }: { boardId: string }) {
@@ -46,7 +45,6 @@ export function Board({ boardId, cardId: routeCardId }: { boardId: string; cardI
   const queryCardId = useSearchParam("card");
   const cardId = routeCardId ?? queryCardId;
   const updateBoard = useUpdateBoard(board?.organizationId ?? "");
-  const deleteBoard = useDeleteBoard(board?.organizationId ?? "");
   const isFavorite = useFavoritesStore((s) => s.isFavorite(boardId));
   const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
 
@@ -73,7 +71,7 @@ export function Board({ boardId, cardId: routeCardId }: { boardId: string; cardI
 
   return (
     <AppShell>
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4 md:px-6">
+      <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-background/55 px-4 py-2 backdrop-blur-sm md:px-6">
         <Button
           variant="ghost"
           size="icon"
@@ -98,7 +96,7 @@ export function Board({ boardId, cardId: routeCardId }: { boardId: string; cardI
             />
           ) : (
             <button onClick={() => { setTitle(board.title); setRenaming(true); }} className="group flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-semibold tracking-tight">{board.title}</span>
+              <span className="truncate text-lg font-semibold tracking-[-0.035em]">{board.title}</span>
               <Pencil className="size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" />
             </button>
           )
@@ -132,42 +130,37 @@ export function Board({ boardId, cardId: routeCardId }: { boardId: string; cardI
               </span>
               <ManageLabels boardId={boardId} labels={board.labels} />
               <ManageCustomFields boardId={boardId} />
-              <Button variant="ghost" size="sm" className="hidden text-muted-foreground sm:inline-flex" onClick={() => setShowArchived((v) => !v)}>
-                {showArchived ? "Hide archived" : "Show archived"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="hidden text-muted-foreground sm:inline-flex"
-                onClick={() =>
-                  updateBoard.mutate({ boardId, archived: !board.archivedAt, expectedVersion: board.version }, { onError: (e) => setOpError(e instanceof ApiError ? e.message : "Something went wrong") })
-                }
-              >
-                {board.archivedAt ? "Unarchive" : "Archive"}
-              </Button>
-              <ConfirmButton
-                label="Delete"
-                confirmLabel="Confirm?"
-                className="hidden sm:inline-flex"
-                onConfirm={() =>
-                  deleteBoard.mutate(
-                    { boardId },
-                    {
-                      onSuccess: () => navigate(`/o/${board.organizationId}`),
-                      onError: (e) => setOpError(e instanceof ApiError ? e.message : "Something went wrong"),
-                    },
-                  )
-                }
-              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Board actions">
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setShowArchived((v) => !v)}>
+                    {showArchived ? "Hide Archived" : "Show Archived"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      updateBoard.mutate(
+                        { boardId, archived: !board.archivedAt, expectedVersion: board.version },
+                        { onError: (e) => setOpError(e instanceof ApiError ? e.message : "Something went wrong") },
+                      )
+                    }
+                  >
+                    {board.archivedAt ? "Unarchive Board" : "Archive Board"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           ) : null}
-          <UserCluster />
         </div>
       </header>
       {opError ? <p className="border-b border-border px-4 py-1.5 text-xs text-destructive md:px-6">{opError}</p> : null}
 
       {board && view === "board" ? (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 md:px-6">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/35 px-4 py-2.5 md:px-6">
           <span className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input

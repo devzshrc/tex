@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <p className={cn("text-[11px] font-medium tracking-[0.2em] text-muted-foreground uppercase", className)}>
+    <p className={cn("text-[10px] font-semibold tracking-[0.22em] text-primary uppercase", className)}>
       {children}
     </p>
   );
@@ -76,10 +76,10 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
       <div>
         <Eyebrow>{eyebrow}</Eyebrow>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="mt-1 text-3xl font-semibold tracking-[-0.045em] md:text-4xl">{title}</h1>
         {hint ? <p className="mt-1 text-[13px] text-muted-foreground">{hint}</p> : null}
       </div>
       {actions ? <div className="flex items-center gap-1.5">{actions}</div> : null}

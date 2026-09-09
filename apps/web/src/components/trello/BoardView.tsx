@@ -12,7 +12,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { Plus, X } from "@/components/ui/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -228,7 +228,7 @@ export function BoardView({
           ))}
           <div className="w-72 shrink-0">
             {addingList ? (
-              <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-2.5">
+              <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card/72 p-3 shadow-[0_20px_40px_-32px_rgb(0_0_0_/_1)]">
                 <Input
                   autoFocus
                   value={listTitle}
@@ -261,7 +261,7 @@ export function BoardView({
       <DragOverlay dropAnimation={null}>
         {overlayCard ? <CardRow card={overlayCard} onOpen={() => {}} overlay /> : null}
         {overlayList ? (
-          <div className="w-72 shrink-0 rotate-2 rounded-lg border border-border bg-muted/40 p-3 shadow-lg">
+          <div className="w-72 shrink-0 rotate-2 rounded-2xl border border-primary/50 bg-card p-3 shadow-2xl shadow-black/50">
             <p className="text-[13px] font-semibold">{overlayList.title}</p>
             <p className="text-xs text-muted-foreground tabular-nums">{overlayList.cards.length} cards</p>
           </div>
